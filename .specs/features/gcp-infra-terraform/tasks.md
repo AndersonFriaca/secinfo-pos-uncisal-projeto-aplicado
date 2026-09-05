@@ -690,6 +690,7 @@ T23 → T24
 **Tests**: none
 **Gate**: Build
 **Commit**: `docs(infra): document full deploy and teardown procedure with free-tier summary`
+**Status**: ✅ Complete
 
 ---
 

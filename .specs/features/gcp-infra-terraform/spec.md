@@ -245,19 +245,19 @@ Explicitly excluded. Documented to prevent scope creep.
 | INFRA-24 | P3: Remote Terraform state in GCS | Design | Done |
 | INFRA-25 | P3: Remote Terraform state in GCS | Design | Done |
 | INFRA-26 | P3: Remote Terraform state in GCS | Design | Done |
-| DESTROY-01 | P1: Clean full teardown via terraform destroy | Design | Pending |
-| DESTROY-02 | P1: Clean full teardown via terraform destroy | Design | Pending |
-| DESTROY-03 | P1: Clean full teardown via terraform destroy | Design | Pending |
-| DESTROY-04 | P1: Clean full teardown via terraform destroy | Design | Pending |
-| DESTROY-05 | P1: Clean full teardown via terraform destroy | Design | Pending |
-| DESTROY-06 | P1: Clean full teardown via terraform destroy | Design | Pending |
+| DESTROY-01 | P1: Clean full teardown via terraform destroy | Design | Done |
+| DESTROY-02 | P1: Clean full teardown via terraform destroy | Design | Done |
+| DESTROY-03 | P1: Clean full teardown via terraform destroy | Design | Done |
+| DESTROY-04 | P1: Clean full teardown via terraform destroy | Design | Done |
+| DESTROY-05 | P1: Clean full teardown via terraform destroy | Design | Done |
+| DESTROY-06 | P1: Clean full teardown via terraform destroy | Design | Done |
 | BILL-01 | P1: Billing budget as a cost safety net | Design | Implementing |
 | BILL-02 | P1: Billing budget as a cost safety net | Design | Implementing |
 | BILL-03 | P1: Billing budget as a cost safety net | Design | Implementing |
 | BILL-04 | P1: Billing budget as a cost safety net | Design | Implementing |
 | BILL-05 | P1: Billing budget as a cost safety net | Design | Pending |
 | BILL-06 | P1: Billing budget as a cost safety net | Design | Implementing |
-| BILL-07 | P1: Billing budget as a cost safety net | Design | Implementing |
+| BILL-07 | P1: Billing budget as a cost safety net | Design | Done |
 | GIT-01 | P1: Initialize local git repository | Design | Implementing |
 | GIT-02 | P1: Initialize local git repository | Design | Implementing |
 | GIT-03 | P1: Initialize local git repository | Design | Implementing |
