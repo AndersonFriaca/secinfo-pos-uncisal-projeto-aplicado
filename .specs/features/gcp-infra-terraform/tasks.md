@@ -602,11 +602,12 @@ T17 → T18 → T19 → T20 → T21 → T22
 - Skill: NONE
 
 **Done when**:
-- [ ] Defines one PM2 app: `name: "nextjs-app"`, `script: "npm"`, `args: "start"`, `cwd: "/opt/app"`, `env: { PORT: 3000 }`, default PM2 restart-on-crash behavior (no `autorestart: false` override)
+- [x] Defines one PM2 app: `name: "nextjs-app"`, `script: "npm"`, `args: "start"`, `cwd: "/opt/app"`, `env: { PORT: 3000 }`, default PM2 restart-on-crash behavior (no `autorestart: false` override)
 
 **Tests**: none
 **Gate**: Quick (JS syntax — `node --check infra/scripts/ecosystem.config.js`)
 **Commit**: `feat(infra): add pm2 ecosystem config for nextjs app`
+**Status**: ✅ Complete
 
 ---
 
