@@ -242,9 +242,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | INFRA-21 | P2: Prepare VM for Next.js hosting | Design | Implementing |
 | INFRA-22 | P2: Prepare VM for Next.js hosting | Design | Implementing |
 | INFRA-23 | P3: Remote Terraform state in GCS | Design | Implementing |
-| INFRA-24 | P3: Remote Terraform state in GCS | Design | Implementing |
-| INFRA-25 | P3: Remote Terraform state in GCS | Design | Implementing |
-| INFRA-26 | P3: Remote Terraform state in GCS | Design | Implementing |
+| INFRA-24 | P3: Remote Terraform state in GCS | Design | Done |
+| INFRA-25 | P3: Remote Terraform state in GCS | Design | Done |
+| INFRA-26 | P3: Remote Terraform state in GCS | Design | Done |
 | DESTROY-01 | P1: Clean full teardown via terraform destroy | Design | Pending |
 | DESTROY-02 | P1: Clean full teardown via terraform destroy | Design | Pending |
 | DESTROY-03 | P1: Clean full teardown via terraform destroy | Design | Pending |

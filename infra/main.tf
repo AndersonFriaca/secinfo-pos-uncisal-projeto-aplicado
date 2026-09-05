@@ -8,13 +8,8 @@ terraform {
     }
   }
 
-  # Uncomment after `infra/bootstrap` has been applied and its
-  # `state_bucket_name` output copied in below, then run
-  # `terraform init -migrate-state` inside infra/. See README's
-  # bootstrap/migration steps.
-  # backend "gcs" {
-  #   bucket = "<state_bucket_name from infra/bootstrap output>"
-  # }
+  # Remote state backend configuration lives in backend.tf (commented until
+  # infra/bootstrap has been applied — see README's "Bootstrap" section).
 }
 
 provider "google" {

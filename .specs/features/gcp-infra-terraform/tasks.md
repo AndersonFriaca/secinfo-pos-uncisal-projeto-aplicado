@@ -663,6 +663,7 @@ T23 → T24
 **Tests**: none
 **Gate**: Quick
 **Commit**: `feat(infra): add dedicated gcs backend file for state migration`
+**Status**: ✅ Complete
 
 ---
 
