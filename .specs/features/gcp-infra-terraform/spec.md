@@ -244,7 +244,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | INFRA-23 | P3: Remote Terraform state in GCS | Design | Pending |
 | INFRA-24 | P3: Remote Terraform state in GCS | Design | Pending |
 | INFRA-25 | P3: Remote Terraform state in GCS | Design | Pending |
-| INFRA-26 | P3: Remote Terraform state in GCS | Design | Pending |
+| INFRA-26 | P3: Remote Terraform state in GCS | Design | Implementing |
 | DESTROY-01 | P1: Clean full teardown via terraform destroy | Design | Pending |
 | DESTROY-02 | P1: Clean full teardown via terraform destroy | Design | Pending |
 | DESTROY-03 | P1: Clean full teardown via terraform destroy | Design | Pending |

@@ -159,6 +159,7 @@ T4 → T5 → T6 → T7
 **Tests**: none
 **Gate**: Quick
 **Commit**: `feat(bootstrap): add provider configuration for bootstrap root`
+**Status**: ✅ Complete
 
 ---
 
