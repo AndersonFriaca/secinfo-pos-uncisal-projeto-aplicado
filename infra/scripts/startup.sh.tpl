@@ -190,3 +190,52 @@ if [ ! -f "$PM2_UNIT" ]; then
     eval "$PM2_STARTUP_CMD"
   fi
 fi
+
+# --- Stage 10: PM2 app directory + Nginx reverse proxy to the app ---
+# ecosystem.config.js is written inline (not copied from a path on the
+# VM) since startup.sh.tpl is rendered into instance metadata as a
+# string — infra/scripts/ecosystem.config.js never gets uploaded to the
+# VM's filesystem on its own. Content must stay identical to that file.
+mkdir -p /opt/app
+if [ ! -f /opt/app/ecosystem.config.js ]; then
+  cat > /opt/app/ecosystem.config.js <<'EOF'
+module.exports = {
+  apps: [
+    {
+      name: "nextjs-app",
+      script: "npm",
+      args: "start",
+      cwd: "/opt/app",
+      env: {
+        PORT: 3000,
+      },
+    },
+  ],
+};
+EOF
+fi
+
+if [ -f "$HTTPS_SITE" ] && grep -qF "# managed-by-terraform: proxy-placeholder" "$HTTPS_SITE"; then
+  cat > "$HTTPS_SITE" <<EOF
+# managed-by-terraform: https site
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+
+    ssl_certificate     /etc/letsencrypt/live/$PUBLIC_IP/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$PUBLIC_IP/privkey.pem;
+
+    location / {
+        # managed-by-terraform: nextjs-reverse-proxy
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+    }
+}
+EOF
+  nginx -t && systemctl reload nginx
+fi

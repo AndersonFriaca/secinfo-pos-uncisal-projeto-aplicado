@@ -624,14 +624,17 @@ T17 → T18 → T19 → T20 → T21 → T22
 - Skill: NONE
 
 **Done when**:
-- [ ] `mkdir -p /opt/app` + copies `ecosystem.config.js` into it, guarded so a future real deploy isn't clobbered on reboot (`[ -f /opt/app/ecosystem.config.js ] || cp ...`)
-- [ ] Adds `location / { proxy_pass http://localhost:3000; ... }` to the HTTPS server block written in T19, `nginx -t && systemctl reload nginx`
-- [ ] Script completes successfully even when PM2 has zero registered processes (no error exit if `/opt/app` is otherwise empty)
-- [ ] `bash -n` parses clean — this closes out the full startup script
+- [x] `mkdir -p /opt/app` + copies `ecosystem.config.js` into it, guarded so a future real deploy isn't clobbered on reboot (`[ -f /opt/app/ecosystem.config.js ] || cp ...`)
+- [x] Adds `location / { proxy_pass http://localhost:3000; ... }` to the HTTPS server block written in T19, `nginx -t && systemctl reload nginx`
+- [x] Script completes successfully even when PM2 has zero registered processes (no error exit if `/opt/app` is otherwise empty)
+- [x] `bash -n` parses clean — this closes out the full startup script
 
 **Tests**: none
 **Gate**: Shell (final full-script `bash -n` pass on the complete file)
 **Commit**: `feat(infra): add nginx reverse proxy to nextjs app and pm2 app dir`
+**Status**: ✅ Complete
+
+**Deviation note**: `ecosystem.config.js` content is written inline via heredoc rather than `cp`-ied from `infra/scripts/ecosystem.config.js`, since `startup.sh.tpl` is rendered into instance metadata as a string — the sibling file is never uploaded to the VM's filesystem on its own. Content is kept identical to T21's file.
 
 ---
 
