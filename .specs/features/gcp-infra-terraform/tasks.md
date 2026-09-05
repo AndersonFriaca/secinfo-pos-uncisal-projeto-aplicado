@@ -724,6 +724,7 @@ T25
 **Tests**: none (this task's gate IS the test)
 **Gate**: Build
 **Commit**: `chore(infra): final validation pass`
+**Status**: ✅ Complete
 
 ---
 
