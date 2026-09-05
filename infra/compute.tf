@@ -8,6 +8,11 @@ resource "google_compute_instance" "vm" {
   zone         = var.zone
   tags         = ["web-server"]
 
+  # Required by the provider whenever a change (e.g. shielded_instance_config,
+  # network_interface) needs the instance stopped first — Terraform stops
+  # and restarts it automatically instead of erroring out.
+  allow_stopping_for_update = true
+
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
@@ -24,7 +29,18 @@ resource "google_compute_instance" "vm" {
       # Provider default is PREMIUM (only 1 GB/month free). STANDARD
       # carries its own separate 200 GB/month/region free allowance.
       network_tier = "STANDARD"
+      # Reserved (static) IP instead of ephemeral — see address.tf. Free
+      # while attached to this running instance.
+      nat_ip = google_compute_address.static.address
     }
+  }
+
+  # Shielded VM: secure boot + vTPM + integrity monitoring. No extra
+  # cost, supported by the ubuntu-2404-lts image family used above.
+  shielded_instance_config {
+    enable_secure_boot          = true
+    enable_vtpm                 = true
+    enable_integrity_monitoring = true
   }
 
   metadata = {

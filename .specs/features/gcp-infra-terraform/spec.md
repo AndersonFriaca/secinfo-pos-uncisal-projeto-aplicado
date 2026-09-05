@@ -71,8 +71,10 @@ Explicitly excluded. Documented to prevent scope creep.
 6. The system SHALL set the instance's external IP `network_tier` to `STANDARD` (never the provider's `PREMIUM` default) — Standard Tier carries its own separate 200 GB/month/region free allowance (independent of the classic Always Free 1 GB Compute Engine egress, which is scoped to Premium Tier), making Standard Tier the safer, more generous choice for this workload. <!-- ubiquitous -->
 7. The system SHALL NOT install or enable the Cloud Ops Agent (Monitoring/Logging agent) on the instance — observability stays local (`journalctl`/syslog) to avoid Ops Agent ingestion charges beyond the free allotment. <!-- ubiquitous -->
 8. The system SHALL NOT attach any scheduled snapshot policy (`google_compute_resource_policy` of type snapshot-schedule) or automated backup to the boot disk, and boot disk auto-delete-on-instance-deletion SHALL remain enabled (`auto_delete = true`) — no snapshot storage is provisioned that could accrue Cloud Storage/snapshot charges beyond the Always Free disk allowance. <!-- ubiquitous -->
+9. The system SHALL assign the instance a reserved (static) external IP address (`google_compute_address`) rather than an ephemeral one, so the public IP survives a stop/restart or in-place update. <!-- ubiquitous -->
+10. The system SHALL enable Shielded VM on the instance (`enable_secure_boot = true`, `enable_vtpm = true`, `enable_integrity_monitoring = true`). <!-- ubiquitous -->
 
-**Independent Test**: Run `terraform apply`, then `gcloud compute instances describe <name>` confirms machine type `e2-micro`, zone `us-east1-b`, image family `ubuntu-2404-lts-amd64`, and `networkInterfaces[0].accessConfigs[0].networkTier = STANDARD`; `gcloud compute firewall-rules list` shows only 22/80/443 allowed; `ssh -i <key> <user>@<external-ip>` succeeds while `ssh` with a password prompt is rejected; `gcloud compute instances describe <name> --format="value(metadata)"` shows no Ops Agent install script, `systemctl status google-cloud-ops-agent` on the VM returns "not found", and `gcloud compute resource-policies list` returns empty (no snapshot schedule attached to the disk).
+**Independent Test**: Run `terraform apply`, then `gcloud compute instances describe <name>` confirms machine type `e2-micro`, zone `us-east1-b`, image family `ubuntu-2404-lts-amd64`, `networkInterfaces[0].accessConfigs[0].networkTier = STANDARD`, `networkInterfaces[0].accessConfigs[0].natIP` matches a `gcloud compute addresses describe` reserved address (not ephemeral), and `shieldedInstanceConfig` shows `enableSecureBoot: true`, `enableVtpm: true`, `enableIntegrityMonitoring: true`; `gcloud compute firewall-rules list` shows only 22/80/443 allowed; `ssh -i <key> <user>@<external-ip>` succeeds while `ssh` with a password prompt is rejected; `gcloud compute instances describe <name> --format="value(metadata)"` shows no Ops Agent install script, `systemctl status google-cloud-ops-agent` on the VM returns "not found", and `gcloud compute resource-policies list` returns empty (no snapshot schedule attached to the disk).
 
 ---
 
@@ -245,6 +247,8 @@ Explicitly excluded. Documented to prevent scope creep.
 | INFRA-24 | P3: Remote Terraform state in GCS | Design | Done |
 | INFRA-25 | P3: Remote Terraform state in GCS | Design | Done |
 | INFRA-26 | P3: Remote Terraform state in GCS | Design | Done |
+| INFRA-27 | P1: Provision hardened GCP compute instance | Done | Done |
+| INFRA-28 | P1: Provision hardened GCP compute instance | Done | Done |
 | DESTROY-01 | P1: Clean full teardown via terraform destroy | Design | Done |
 | DESTROY-02 | P1: Clean full teardown via terraform destroy | Design | Done |
 | DESTROY-03 | P1: Clean full teardown via terraform destroy | Design | Done |
@@ -263,7 +267,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | GIT-03 | P1: Initialize local git repository | Design | Implementing |
 | GIT-04 | P1: Initialize local git repository | Design | Implementing |
 
-**Coverage:** 43 total, 0 mapped to tasks, 43 unmapped ⚠️ (tasks phase not yet run)
+**Coverage:** 45 total, 25 mapped to tasks (T1-T25), 2 unmapped ⚠️ (INFRA-27/28 — static IP + Shielded VM, added post-Execute; implemented directly against the real deployment, no formal task entry)
 
 ---
 
