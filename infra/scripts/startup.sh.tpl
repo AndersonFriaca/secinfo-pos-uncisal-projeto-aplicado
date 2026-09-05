@@ -124,7 +124,11 @@ else
 fi
 
 # --- Stage 7: HTTPS server block + HTTP->HTTPS redirect (only on a valid cert) ---
-if [ "$CERT_OBTAINED" = true ] && [ ! -f "$HTTPS_SITE" ]; then
+# Rewrite whenever the file is missing OR still points at a stale IP (e.g.
+# after the instance's public IP changed) — grep-checking the live file's
+# own cert path instead of only "does the file exist" keeps this idempotent
+# across an IP change, not just across a no-op reboot.
+if [ "$CERT_OBTAINED" = true ] && { [ ! -f "$HTTPS_SITE" ] || ! grep -qF "/etc/letsencrypt/live/$PUBLIC_IP/" "$HTTPS_SITE"; }; then
   cat > "$HTTPS_SITE" <<EOF
 # managed-by-terraform: https site
 server {
