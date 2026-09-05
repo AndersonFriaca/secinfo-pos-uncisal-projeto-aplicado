@@ -209,6 +209,7 @@ T4 → T5 → T6 → T7
 **Tests**: none
 **Gate**: Quick
 **Commit**: `feat(bootstrap): add GCS bucket for terraform remote state`
+**Status**: ✅ Complete
 
 ---
 
