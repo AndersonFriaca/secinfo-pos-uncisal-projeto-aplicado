@@ -416,6 +416,7 @@ T14 → T15
 **Tests**: none
 **Gate**: Quick
 **Commit**: `feat(infra): add dedicated custom VPC and subnet`
+**Status**: ✅ Complete
 
 ---
 
