@@ -22,3 +22,24 @@ if ! grep -qF "$SSHD_MARKER" "$SSHD_CONFIG"; then
   } >> "$SSHD_CONFIG"
   systemctl reload sshd
 fi
+
+# --- Stage 3: Fail2ban sshd jail (4 attempts / 24h ban) ---
+JAIL_LOCAL="/etc/fail2ban/jail.local"
+JAIL_MARKER="# managed-by-terraform: sshd jail"
+JAIL_BEFORE_HASH=""
+[ -f "$JAIL_LOCAL" ] && JAIL_BEFORE_HASH="$(md5sum "$JAIL_LOCAL" 2>/dev/null || true)"
+
+if ! grep -qF "$JAIL_MARKER" "$JAIL_LOCAL" 2>/dev/null; then
+  cat > "$JAIL_LOCAL" <<EOF
+$JAIL_MARKER
+[sshd]
+enabled = true
+maxretry = 4
+bantime = 24h
+EOF
+fi
+
+JAIL_AFTER_HASH="$(md5sum "$JAIL_LOCAL" 2>/dev/null || true)"
+if [ "$JAIL_BEFORE_HASH" != "$JAIL_AFTER_HASH" ]; then
+  systemctl restart fail2ban
+fi

@@ -524,13 +524,14 @@ T17 → T18 → T19 → T20 → T21 → T22
 - Skill: NONE
 
 **Done when**:
-- [ ] Writes `/etc/fail2ban/jail.local` with `[sshd]\nenabled = true\nmaxretry = 4\nbantime = 24h`, guarded by marker-comment idempotency check
-- [ ] `systemctl restart fail2ban` after write, guarded so it only restarts when the file actually changed (avoid unnecessary restarts on reboot no-ops)
-- [ ] `bash -n` parses clean
+- [x] Writes `/etc/fail2ban/jail.local` with `[sshd]\nenabled = true\nmaxretry = 4\nbantime = 24h`, guarded by marker-comment idempotency check
+- [x] `systemctl restart fail2ban` after write, guarded so it only restarts when the file actually changed (avoid unnecessary restarts on reboot no-ops)
+- [x] `bash -n` parses clean
 
 **Tests**: none
 **Gate**: Shell
 **Commit**: `feat(infra): add fail2ban sshd jail with 4-attempt 24h ban`
+**Status**: ✅ Complete
 
 ---
 
