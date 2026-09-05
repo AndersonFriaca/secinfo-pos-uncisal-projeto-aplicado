@@ -20,7 +20,7 @@ if ! grep -qF "$SSHD_MARKER" "$SSHD_CONFIG"; then
     echo "$SSHD_MARKER"
     echo "PasswordAuthentication no"
   } >> "$SSHD_CONFIG"
-  systemctl reload sshd
+  systemctl reload ssh
 fi
 
 # --- Stage 3: Fail2ban sshd jail (4 attempts / 24h ban) ---
