@@ -230,11 +230,11 @@ Explicitly excluded. Documented to prevent scope creep.
 | INFRA-09 | P1: Harden SSH access with Fail2ban | Design | Implementing |
 | INFRA-10 | P1: Harden SSH access with Fail2ban | Design | Implementing |
 | INFRA-11 | P1: Harden SSH access with Fail2ban | Design | Implementing |
-| INFRA-12 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Pending |
-| INFRA-13 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Pending |
-| INFRA-14 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Pending |
-| INFRA-15 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Pending |
-| INFRA-16 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Pending |
+| INFRA-12 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Implementing |
+| INFRA-13 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Implementing |
+| INFRA-14 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Implementing |
+| INFRA-15 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Implementing |
+| INFRA-16 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Implementing |
 | INFRA-17 | P2: Prepare VM for Next.js hosting | Design | Pending |
 | INFRA-18 | P2: Prepare VM for Next.js hosting | Design | Pending |
 | INFRA-19 | P2: Prepare VM for Next.js hosting | Design | Pending |

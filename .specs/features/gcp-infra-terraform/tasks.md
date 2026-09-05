@@ -548,17 +548,20 @@ T17 → T18 → T19 → T20 → T21 → T22
 - Skill: NONE
 
 **Done when**:
-- [ ] `snap install --classic certbot` + `ln -sf /snap/bin/certbot /usr/bin/certbot`, guarded by `command -v certbot` check
-- [ ] Writes a base Nginx server block on port 80 with a `location /.well-known/acme-challenge/` path, `nginx -t && systemctl reload nginx`
-- [ ] Runs `certbot` against the instance's own public IP to obtain a certificate; the exact flag set is written with a comment flagging that it must be checked against `certbot --help`/current Let's Encrypt IP-cert docs at implementation time (per design's flagged uncertainty — this is a newly-GA'd feature, not something to guess blindly)
-- [ ] On non-zero exit from `certbot`, logs to `journalctl`/`logger` and leaves the HTTP-only block active rather than leaving Nginx in a broken state (AC5 of the HTTPS story)
-- [ ] Confirms/enables Certbot's renewal timer (`systemctl list-timers | grep certbot` or equivalent) if available on the installed version
-- [ ] Guarded with `certbot certificates | grep -q` to skip re-issuance on reboot re-runs
-- [ ] `bash -n` parses clean
+- [x] `snap install --classic certbot` + `ln -sf /snap/bin/certbot /usr/bin/certbot`, guarded by `command -v certbot` check
+- [x] Writes a base Nginx server block on port 80 with a `location /.well-known/acme-challenge/` path, `nginx -t && systemctl reload nginx`
+- [x] Runs `certbot` against the instance's own public IP to obtain a certificate; flags (`--ip-address`, `--preferred-profile shortlived`, `--webroot`) verified via live web search (EFF blog + Let's Encrypt blog, both March 2026), with an inline comment to re-check `certbot --help` on the real VM before trusting the invocation
+- [x] On non-zero exit from `certbot`, logs to `journalctl`/`logger` and leaves the HTTP-only block active rather than leaving Nginx in a broken state (AC5 of the HTTPS story)
+- [x] Confirms/enables Certbot's renewal timer (`systemctl list-timers | grep certbot` or equivalent) if available on the installed version
+- [x] Guarded with `certbot certificates | grep -q` to skip re-issuance on reboot re-runs
+- [x] `bash -n` parses clean
 
 **Tests**: none (live cert issuance is inherently an operator-run, networked step — deferred per Test Coverage Matrix)
 **Gate**: Shell now; Full deferred to operator
 **Commit**: `feat(infra): add nginx + certbot ip-certificate https provisioning`
+**Status**: ✅ Complete
+
+**Deviation note**: design.md assumed Certbot's Nginx plugin would rewrite the server block for HTTPS. Verified via web search (EFF, Let's Encrypt, March 2026) that the nginx/apache plugins do not support IP-address certs — only `--standalone`/`--webroot`/`--manual`. Implemented with `--webroot` + manually-written HTTPS server block + `--deploy-hook "systemctl reload nginx"` on renewal instead.
 
 ---
 
