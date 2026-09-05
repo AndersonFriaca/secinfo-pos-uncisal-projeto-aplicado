@@ -499,14 +499,15 @@ T17 → T18 → T19 → T20 → T21 → T22
 - Skill: NONE
 
 **Done when**:
-- [ ] `#!/bin/bash` + `set -euo pipefail`
-- [ ] `apt-get update && apt-get install -y nginx fail2ban snapd nodejs npm` (naturally idempotent)
-- [ ] `sshd_config` edit guarded by a marker comment (`# managed-by-terraform`) checked with `grep -q` before appending `PasswordAuthentication no`; `systemctl reload sshd` after
-- [ ] `bash -n` (with Terraform interpolations stripped) parses clean
+- [x] `#!/bin/bash` + `set -euo pipefail`
+- [x] `apt-get update && apt-get install -y nginx fail2ban snapd nodejs npm` (naturally idempotent)
+- [x] `sshd_config` edit guarded by a marker comment (`# managed-by-terraform`) checked with `grep -q` before appending `PasswordAuthentication no`; `systemctl reload sshd` after
+- [x] `bash -n` (with Terraform interpolations stripped) parses clean
 
 **Tests**: none
 **Gate**: Shell
 **Commit**: `feat(infra): add startup script base packages and ssh hardening`
+**Status**: ✅ Complete
 
 ---
 
