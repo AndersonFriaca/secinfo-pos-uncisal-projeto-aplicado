@@ -474,6 +474,9 @@ T16
 **Tests**: none (Terraform resource layer — no unit-test framework applies; live shape verified by operator's `gcloud compute instances describe` per spec's Independent Test)
 **Gate**: Quick now; Full deferred to operator (per Test Coverage Matrix — requires `gcloud auth login`)
 **Commit**: `feat(infra): add free-tier-pinned e2-micro compute instance`
+**Status**: ✅ Complete
+
+**Deviation note**: `infra/scripts/startup.sh.tpl` was created as a minimal placeholder (`#!/bin/bash` + `set -euo pipefail` + a comment) so `templatefile()` has a file to read at `validate`/`plan` time. This is NOT the real startup script — Phase 7 (T17-T22) overwrites it with the actual provisioning stages. Flagged here so the next batch treats it as scaffolding, not completed work.
 
 ---
 
