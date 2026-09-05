@@ -1,0 +1,13 @@
+# Secrets
+.env
+.env.*
+*.pem
+id_rsa*
+id_ed25519*
+credentials*.json
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform/
