@@ -364,6 +364,7 @@ T11 → T12 → T13
 **Tests**: none
 **Gate**: Quick
 **Commit**: `feat(infra): add main root variables with validation`
+**Status**: ✅ Complete
 
 ---
 

@@ -223,9 +223,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | INFRA-02 | P1: Provision hardened GCP compute instance | Design | Pending |
 | INFRA-03 | P1: Provision hardened GCP compute instance | Design | Pending |
 | INFRA-04 | P1: Provision hardened GCP compute instance | Design | Pending |
-| INFRA-05 | P1: Provision hardened GCP compute instance | Design | Pending |
-| INFRA-06 | P1: Provision hardened GCP compute instance | Design | Pending |
-| INFRA-07 | P1: Provision hardened GCP compute instance | Design | Pending |
+| INFRA-05 | P1: Provision hardened GCP compute instance | Design | Implementing |
+| INFRA-06 | P1: Provision hardened GCP compute instance | Design | Implementing |
+| INFRA-07 | P1: Provision hardened GCP compute instance | Design | Implementing |
 | INFRA-08 | P1: Provision hardened GCP compute instance | Design | Pending |
 | INFRA-09 | P1: Harden SSH access with Fail2ban | Design | Pending |
 | INFRA-10 | P1: Harden SSH access with Fail2ban | Design | Pending |
