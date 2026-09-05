@@ -235,8 +235,8 @@ Explicitly excluded. Documented to prevent scope creep.
 | INFRA-14 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Implementing |
 | INFRA-15 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Implementing |
 | INFRA-16 | P1: Serve HTTPS via Nginx + Let's Encrypt | Design | Implementing |
-| INFRA-17 | P2: Prepare VM for Next.js hosting | Design | Pending |
-| INFRA-18 | P2: Prepare VM for Next.js hosting | Design | Pending |
+| INFRA-17 | P2: Prepare VM for Next.js hosting | Design | Implementing |
+| INFRA-18 | P2: Prepare VM for Next.js hosting | Design | Implementing |
 | INFRA-19 | P2: Prepare VM for Next.js hosting | Design | Pending |
 | INFRA-20 | P2: Prepare VM for Next.js hosting | Design | Pending |
 | INFRA-21 | P2: Prepare VM for Next.js hosting | Design | Pending |

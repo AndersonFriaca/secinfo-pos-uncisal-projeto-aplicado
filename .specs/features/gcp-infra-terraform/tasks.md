@@ -578,13 +578,14 @@ T17 → T18 → T19 → T20 → T21 → T22
 - Skill: NONE
 
 **Done when**:
-- [ ] `npm install -g pm2`, guarded by `command -v pm2` check
-- [ ] Runs `pm2 startup systemd -u ${ssh_username} --hp /home/${ssh_username}` and executes the printed command (via `su - ${ssh_username} -c "pm2 startup ..."` or equivalent pattern that correctly registers the unit for the non-root operator user), guarded so it only runs once (checks for the generated systemd unit file first)
-- [ ] `bash -n` parses clean
+- [x] `npm install -g pm2`, guarded by `command -v pm2` check
+- [x] Runs `pm2 startup systemd -u ${ssh_username} --hp /home/${ssh_username}` and executes the printed command (via `su - ${ssh_username} -c "pm2 startup ..."` or equivalent pattern that correctly registers the unit for the non-root operator user), guarded so it only runs once (checks for the generated systemd unit file first)
+- [x] `bash -n` parses clean
 
 **Tests**: none
 **Gate**: Shell
 **Commit**: `feat(infra): add pm2 install and systemd startup registration`
+**Status**: ✅ Complete
 
 ---
 

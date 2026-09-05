@@ -177,3 +177,16 @@ if systemctl list-timers --all 2>/dev/null | grep -qi certbot; then
 else
   logger -t startup-script "no certbot renewal timer found on this system; renewal may need manual configuration"
 fi
+
+# --- Stage 9: PM2 install + systemd startup registration ---
+if ! command -v pm2 >/dev/null 2>&1; then
+  npm install -g pm2
+fi
+
+PM2_UNIT="/etc/systemd/system/pm2-${ssh_username}.service"
+if [ ! -f "$PM2_UNIT" ]; then
+  PM2_STARTUP_CMD="$(su - "${ssh_username}" -c "pm2 startup systemd -u ${ssh_username} --hp /home/${ssh_username}" | grep '^sudo ' || true)"
+  if [ -n "$PM2_STARTUP_CMD" ]; then
+    eval "$PM2_STARTUP_CMD"
+  fi
+fi
