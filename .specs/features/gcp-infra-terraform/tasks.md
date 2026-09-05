@@ -439,6 +439,7 @@ T14 → T15
 **Tests**: none
 **Gate**: Quick
 **Commit**: `feat(infra): add least-privilege firewall rules for ssh/http/https`
+**Status**: ✅ Complete
 
 ---
 
