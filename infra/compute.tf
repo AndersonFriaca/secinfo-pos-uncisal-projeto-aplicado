@@ -29,9 +29,9 @@ resource "google_compute_instance" "vm" {
       # Provider default is PREMIUM (only 1 GB/month free). STANDARD
       # carries its own separate 200 GB/month/region free allowance.
       network_tier = "STANDARD"
-      # Reserved (static) IP instead of ephemeral — see address.tf. Free
-      # while attached to this running instance.
-      nat_ip = google_compute_address.static.address
+      # Ephemeral IP (no nat_ip pinned) — a reserved static IP is billed
+      # whenever the VM is stopped (not "in use" by a running instance),
+      # which conflicts with routinely stopping the VM to save cost.
     }
   }
 
