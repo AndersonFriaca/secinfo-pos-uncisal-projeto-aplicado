@@ -219,7 +219,7 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| INFRA-01 | P1: Provision hardened GCP compute instance | Design | Pending |
+| INFRA-01 | P1: Provision hardened GCP compute instance | Design | Implementing |
 | INFRA-02 | P1: Provision hardened GCP compute instance | Design | Pending |
 | INFRA-03 | P1: Provision hardened GCP compute instance | Design | Pending |
 | INFRA-04 | P1: Provision hardened GCP compute instance | Design | Pending |

@@ -386,6 +386,7 @@ T11 → T12 → T13
 **Tests**: none
 **Gate**: Quick (deferred — will fully validate once T16 lands; re-run Quick gate after T16)
 **Commit**: `feat(infra): add instance external IP output`
+**Status**: ✅ Complete
 
 ---
 
