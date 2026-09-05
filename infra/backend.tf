@@ -3,8 +3,8 @@
 # `infra/bootstrap` into the `bucket` field below, then run
 # `terraform init -migrate-state` from inside `infra/`. Full steps are in
 # README.md's "Bootstrap" section.
-# terraform {
-#   backend "gcs" {
-#     bucket = "<state_bucket_name from infra/bootstrap output>"
-#   }
-# }
+terraform {
+  backend "gcs" {
+    bucket = "<gcp-project-id>-state"
+  }
+}

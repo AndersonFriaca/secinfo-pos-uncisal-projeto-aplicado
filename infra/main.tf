@@ -16,4 +16,10 @@ provider "google" {
   project = var.project_id
   region  = var.region
   zone    = var.zone
+
+  # Some GCP APIs (e.g. billingbudgets in infra/bootstrap) reject requests
+  # without an explicit quota/billing project. Setting this consistently
+  # across both roots avoids the same class of failure here.
+  user_project_override = true
+  billing_project       = var.project_id
 }
