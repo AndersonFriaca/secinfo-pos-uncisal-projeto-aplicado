@@ -231,6 +231,7 @@ T4 → T5 → T6 → T7
 **Tests**: none
 **Gate**: Quick
 **Commit**: `feat(bootstrap): output state bucket name`
+**Status**: ✅ Complete
 
 ---
 
