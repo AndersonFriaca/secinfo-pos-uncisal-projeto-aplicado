@@ -253,11 +253,11 @@ Explicitly excluded. Documented to prevent scope creep.
 | DESTROY-06 | P1: Clean full teardown via terraform destroy | Design | Pending |
 | BILL-01 | P1: Billing budget as a cost safety net | Design | Implementing |
 | BILL-02 | P1: Billing budget as a cost safety net | Design | Implementing |
-| BILL-03 | P1: Billing budget as a cost safety net | Design | Pending |
-| BILL-04 | P1: Billing budget as a cost safety net | Design | Pending |
+| BILL-03 | P1: Billing budget as a cost safety net | Design | Implementing |
+| BILL-04 | P1: Billing budget as a cost safety net | Design | Implementing |
 | BILL-05 | P1: Billing budget as a cost safety net | Design | Pending |
-| BILL-06 | P1: Billing budget as a cost safety net | Design | Pending |
-| BILL-07 | P1: Billing budget as a cost safety net | Design | Pending |
+| BILL-06 | P1: Billing budget as a cost safety net | Design | Implementing |
+| BILL-07 | P1: Billing budget as a cost safety net | Design | Implementing |
 | GIT-01 | P1: Initialize local git repository | Design | Implementing |
 | GIT-02 | P1: Initialize local git repository | Design | Implementing |
 | GIT-03 | P1: Initialize local git repository | Design | Implementing |

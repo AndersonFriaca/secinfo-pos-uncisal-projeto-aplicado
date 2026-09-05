@@ -308,6 +308,7 @@ T8 → T9 → T10
 **Tests**: none
 **Gate**: Quick (live verification — `gcloud billing budgets list` — deferred to operator per Test Coverage Matrix)
 **Commit**: `feat(bootstrap): add billing budget alert with escalating thresholds`
+**Status**: ✅ Complete
 
 ---
 
