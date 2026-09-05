@@ -251,7 +251,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | DESTROY-04 | P1: Clean full teardown via terraform destroy | Design | Pending |
 | DESTROY-05 | P1: Clean full teardown via terraform destroy | Design | Pending |
 | DESTROY-06 | P1: Clean full teardown via terraform destroy | Design | Pending |
-| BILL-01 | P1: Billing budget as a cost safety net | Design | Pending |
+| BILL-01 | P1: Billing budget as a cost safety net | Design | Implementing |
 | BILL-02 | P1: Billing budget as a cost safety net | Design | Implementing |
 | BILL-03 | P1: Billing budget as a cost safety net | Design | Pending |
 | BILL-04 | P1: Billing budget as a cost safety net | Design | Pending |
