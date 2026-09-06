@@ -54,7 +54,11 @@ describe("buildSecurityHeaders — CSP (SEC-08, SEC-09)", () => {
   });
 });
 
-describe("buildSecurityHeaders — static headers by value (SEC-10, SEC-11, SEC-13..SEC-18, SEC-20)", () => {
+// SEC-18 (explicit `Content-Type: text/html; charset=utf-8` on HTML responses)
+// is not set by this builder: Next.js emits it on every server-rendered HTML
+// response by default, and the proxy passes that response through unchanged.
+// It is therefore framework-provided, not asserted here.
+describe("buildSecurityHeaders — static headers by value (SEC-10, SEC-11, SEC-14, SEC-15, SEC-16)", () => {
   it.each([
     ["Strict-Transport-Security", "max-age=63072000; includeSubDomains"],
     ["X-Frame-Options", "DENY"],
