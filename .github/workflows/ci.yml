@@ -34,3 +34,55 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+  iac-guardrails:
+    name: infra IAM & firewall guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Credential-free static checks. These protect the Amendment 2 hardening
+      # (R2 instance-scoped IAM, R3 opt-in public :22) from silently regressing —
+      # terraform fmt/validate cannot see IAM scope or firewall breadth.
+      - name: Deploy SA holds no predefined project role
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          bad=$(git grep -nE 'google_project_iam_member' -- infra/ \
+                | grep -v 'resource "google_project_iam_member" "deploy_vm_operator"' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Unexpected google_project_iam_member binding in infra/ (only the deployVmOperator custom-role binding is allowed):"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: No firewall rule opens tcp:22 to 0.0.0.0/0
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          offenders=$(awk '
+            /resource "google_compute_firewall"/ { blk=$0; has22=0; hasany=0; next }
+            blk != "" {
+              if ($0 ~ /"22"/)        has22=1
+              if ($0 ~ /0\.0\.0\.0\/0/) hasany=1
+              if ($0 ~ /^}/) {
+                if (has22 && hasany) print blk
+                blk=""
+              }
+            }
+          ' infra/firewall.tf)
+          if [ -n "$offenders" ]; then
+            echo "::error::A google_compute_firewall rule allows tcp:22 from 0.0.0.0/0:"
+            echo "$offenders"
+            exit 1
+          fi
+
+      - name: allow_ssh firewall rule stays count-gated
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          if ! grep -A4 'resource "google_compute_firewall" "allow_ssh"' infra/firewall.tf | grep -qE '^\s*count\s*='; then
+            echo "::error::infra/firewall.tf allow_ssh must keep its 'count =' guard so public :22 stays opt-in."
+            exit 1
+          fi
