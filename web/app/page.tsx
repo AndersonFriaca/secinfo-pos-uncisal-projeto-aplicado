@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { getAuthenticatedUser } from "@/lib/auth/session";
+import { headerNavLink } from "@/lib/nav";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,6 +33,7 @@ export default async function Home() {
 
   const sessionCookie = (await cookies()).get(SESSION_COOKIE)?.value ?? null;
   const user = await getAuthenticatedUser(sessionCookie);
+  const navLink = headerNavLink(user);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -39,15 +41,9 @@ export default async function Home() {
         <span className="font-heading text-sm font-semibold">
           Projeto Aplicado
         </span>
-        {user ? (
-          <Button asChild size="sm" variant="outline">
-            <Link href="/dashboard">Go to dashboard</Link>
-          </Button>
-        ) : (
-          <Button asChild size="sm" variant="outline">
-            <Link href="/login">Log in</Link>
-          </Button>
-        )}
+        <Button asChild size="sm" variant="outline">
+          <Link href={navLink.href}>{navLink.label}</Link>
+        </Button>
       </header>
 
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-8 px-6 py-16">
