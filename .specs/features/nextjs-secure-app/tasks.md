@@ -190,16 +190,17 @@ T4 → T5 → T6
 - Skill: NONE
 
 **Done when**:
-- [ ] `buildSecurityHeaders({ nonce, isDev, sensitive })` returns CSP (`default-src 'self'`, `script-src 'self' 'nonce-X' 'strict-dynamic'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, `upgrade-insecure-requests`), `Strict-Transport-Security: max-age=63072000; includeSubDomains`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 0`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), camera=(), microphone=()`, and all three `Cross-Origin-*` headers
-- [ ] `sensitive: true` adds `Cache-Control: no-store`
-- [ ] Production output contains neither `'unsafe-inline'` nor `'unsafe-eval'`; `isDev: true` adds `'unsafe-eval'` only
-- [ ] The result never contains `Access-Control-Allow-Origin`, `Expect-CT`, `Public-Key-Pins`, or `X-Powered-By`
-- [ ] Unit tests assert every header **by value** (not merely present), plus the absence assertions above
-- [ ] Quick gate passes
+- [x] `buildSecurityHeaders({ nonce, isDev, sensitive })` returns CSP (`default-src 'self'`, `script-src 'self' 'nonce-X' 'strict-dynamic'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, `upgrade-insecure-requests`), `Strict-Transport-Security: max-age=63072000; includeSubDomains`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 0`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), camera=(), microphone=()`, and all three `Cross-Origin-*` headers
+- [x] `sensitive: true` adds `Cache-Control: no-store`
+- [x] Production output contains neither `'unsafe-inline'` nor `'unsafe-eval'`; `isDev: true` adds `'unsafe-eval'` only
+- [x] The result never contains `Access-Control-Allow-Origin`, `Expect-CT`, `Public-Key-Pins`, or `X-Powered-By`
+- [x] Unit tests assert every header **by value** (not merely present), plus the absence assertions above
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add owasp security header builder`
+**Status**: [x] Complete
 
 ---
 
