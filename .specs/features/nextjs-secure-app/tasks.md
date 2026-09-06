@@ -310,16 +310,17 @@ T9 → T10
 - Skill: NONE
 
 **Done when**:
-- [ ] The file is `web/proxy.ts` exporting `proxy(request)` — Next.js 16's convention, **not** `middleware.ts`/`middleware()`
-- [ ] A fresh nonce per request is set both on the forwarded request (`x-nonce`) and inside the CSP response header, following the Next.js 16 CSP guide so the framework applies it to its own scripts
-- [ ] `export const config.matcher` excludes `_next/static`, `_next/image`, and `favicon.ico`, and **includes** `/api` (unlike the Next.js sample) because API routes need the Origin and CSRF checks from T10
-- [ ] It imports nothing from `firebase-admin` or the Firestore SDK — the Edge runtime cannot load them
-- [ ] Unit tests invoke `proxy()` with a constructed `NextRequest` and assert: every header present with its expected value, and that two consecutive calls produce different nonces
-- [ ] Quick gate passes
+- [x] The file is `web/proxy.ts` exporting `proxy(request)` — Next.js 16's convention, **not** `middleware.ts`/`middleware()`
+- [x] A fresh nonce per request is set both on the forwarded request (`x-nonce`) and inside the CSP response header, following the Next.js 16 CSP guide so the framework applies it to its own scripts
+- [x] `export const config.matcher` excludes `_next/static`, `_next/image`, and `favicon.ico`, and **includes** `/api` (unlike the Next.js sample) because API routes need the Origin and CSRF checks from T10
+- [x] It imports nothing from `firebase-admin` or the Firestore SDK — the Edge runtime cannot load them
+- [x] Unit tests invoke `proxy()` with a constructed `NextRequest` and assert: every header present with its expected value, and that two consecutive calls produce different nonces
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add edge proxy with csp nonce and security headers`
+**Status**: [x] Complete
 
 ---
 
