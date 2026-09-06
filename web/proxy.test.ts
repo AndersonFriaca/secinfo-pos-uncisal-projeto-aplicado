@@ -94,6 +94,18 @@ describe("proxy — OWASP header set (SEC-12)", () => {
   });
 });
 
+describe("proxy — no-store on sensitive paths (SEC-17)", () => {
+  it("sets Cache-Control: no-store on a /dashboard response", async () => {
+    const res = await get(`${APP}/dashboard`);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("does not set Cache-Control on a non-sensitive path", async () => {
+    const res = await get(`${APP}/`);
+    expect(res.headers.get("cache-control")).toBeNull();
+  });
+});
+
 describe("proxy — matcher config", () => {
   it("excludes Next static output and includes /api", () => {
     const source = (config.matcher[0] as { source: string }).source;
