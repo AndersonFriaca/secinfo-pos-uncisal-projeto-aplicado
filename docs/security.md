@@ -1,85 +1,93 @@
-# Security
+# Segurança
 
-Each hardening measure below maps to a course requirement (see `prd.md`,
-Eixo 1) and to specific `infra/` code.
+Cada medida de hardening abaixo mapeia para um requisito da disciplina (veja
+`prd.md`, Eixo 1) e para trechos específicos de código em `infra/`.
 
-## Network: least privilege by construction
+## Rede: menor privilégio por construção
 
-`infra/network.tf` creates a **dedicated custom-mode VPC**, never GCP's
-`default` network. `default` ships with permissive `default-allow-*` rules
-(SSH, internal traffic, ICMP from anywhere) that would undermine
-least-privilege even after adding new rules on top of them — a custom VPC
-has *no* implicit-allow rules, so `infra/firewall.tf` **is** the entire
-exposed surface, not "the exposed surface plus whatever `default` already
-opened." That surface is: `tcp:22` from the IAP range `35.235.240.0/20`
-(always — this is how the keyless CI and `--tunnel-through-iap` reach
-sshd), `tcp:22` from `var.operator_ssh_cidrs` (only when the operator sets
-that list — direct SSH is opt-in, off by default), and `tcp:80` / `tcp:443`
-from anywhere.
+`infra/network.tf` cria uma **VPC custom-mode dedicada**, nunca a rede
+`default` do GCP. A `default` vem com regras permissivas `default-allow-*`
+(SSH, tráfego interno, ICMP de qualquer lugar) que minariam o menor privilégio
+mesmo depois de adicionar novas regras por cima delas — uma VPC custom **não
+tem** regras de allow implícito, então `infra/firewall.tf` **é** toda a
+superfície exposta, não "a superfície exposta mais o que a `default` já
+abriu". Essa superfície são quatro regras: `allow-ssh` (`tcp:22` a partir de
+`var.operator_ssh_cidrs`, que por padrão é `0.0.0.0/0` para a banca avaliadora
+conseguir conectar; restrinja a CIDRs específicos para endurecer),
+`allow-iap-ssh` (`tcp:22` a partir da faixa IAP `35.235.240.0/20`, sempre
+presente — é assim que o deploy da CI sem chave e o `--tunnel-through-iap`
+alcançam o sshd) e `allow-http` / `allow-https` (`tcp:80` / `tcp:443` de
+qualquer lugar). A regra `allow-iap-ssh` é **aditiva**: ela não substitui o
+`:22` público, apenas garante o caminho keyless da CI mesmo que
+`operator_ssh_cidrs` seja restrito.
 
-## SSH: IAP tunnel by default, key-only, brute-force protected
+## SSH: `:22` público, somente por chave, protegido contra força bruta
 
-- By default there is **no public `:22`**. Reach the VM with
-  `gcloud compute ssh <user>@app-vm --tunnel-through-iap` (the caller's
-  principal needs `roles/iap.tunnelResourceAccessor`, or Owner plus a
-  self-grant). Direct `:22` from a fixed CIDR is opt-in: set
-  `operator_ssh_cidrs` in `terraform.tfvars` (e.g. `["203.0.113.4/32"]`)
-  and Terraform adds the `allow-ssh` rule for exactly those ranges.
-- `infra/compute.tf` injects the operator's **public** key via instance
-  metadata (`ssh-keys`) — the private key never touches Terraform or the
-  repository.
-- The startup script (stage 2) appends `PasswordAuthentication no` to
-  `sshd_config` on every boot, idempotently.
-- Fail2ban (stage 3) bans an IP for 24 hours after 4 failed SSH attempts.
-  This isn't theoretical — the first real deployment had a genuine
-  brute-force attempt banned within hours of going live.
+- O `:22` fica **público e aberto para a banca avaliadora** por padrão
+  (`operator_ssh_cidrs = ["0.0.0.0/0"]`): `ssh <user>@<ip>` conecta direto.
+  Para endurecer, defina `operator_ssh_cidrs` em `terraform.tfvars` (por
+  exemplo `["203.0.113.4/32"]`) e o Terraform restringe a regra `allow-ssh` a
+  exatamente essas faixas. Independentemente disso, o deploy da CI e o
+  operador podem alcançar a VM com `gcloud compute ssh <user>@app-vm
+  --tunnel-through-iap` (o principal chamador precisa de
+  `roles/iap.tunnelResourceAccessor`, ou Owner mais um self-grant).
+- `infra/compute.tf` injeta a chave **pública** do operador via metadata da
+  instância (`ssh-keys`) — a chave privada nunca toca o Terraform nem o
+  repositório.
+- A VM define `block-project-ssh-keys = "TRUE"`: chaves SSH em nível de
+  projeto são ignoradas, e toda chave precisa estar no metadata da *instância*
+  (a do operador via Terraform, ou a chave efêmera do deploy da CI).
+- O script de inicialização (estágio 2) acrescenta `PasswordAuthentication
+  no` ao `sshd_config` em todo boot, de forma idempotente.
+- O Fail2ban (estágio 3) bane um IP por 24 horas depois de 4 tentativas de SSH
+  falhas. Isso não é teórico — o primeiro deploy real teve uma tentativa
+  genuína de força bruta banida poucas horas depois de entrar no ar.
 
-## HTTPS: a real Let's Encrypt certificate, no domain required
+## HTTPS: um certificado real da Let's Encrypt, sem domínio necessário
 
-Let's Encrypt's IP-address certificate program (GA'd early 2026) issues
-certificates for a bare public IP — no DNS record needed. Two things about
-it that aren't obvious from the Certbot docs alone, discovered by actually
-running this against a live VM:
+O programa de certificados de endereço IP da Let's Encrypt (disponível de
+forma geral no início de 2026) emite certificados para um IP público puro —
+sem registro DNS. Duas coisas sobre ele que não são óbvias só pela
+documentação do Certbot, descobertas rodando isto contra uma VM ao vivo:
 
-- **The Nginx/Apache Certbot plugins don't support IP certificates** — only
-  `--standalone`, `--webroot`, and `--manual` do. The startup script uses
-  `--webroot` and writes its own HTTPS server block by hand (stage 7)
-  instead of letting a plugin rewrite it.
-- **IP certificates require `--preferred-profile shortlived`**, which means
-  a **6-day certificate lifetime**, not the usual 90 days. Certbot's
-  renewal timer (twice-daily checks) is load-bearing here, not just a
-  nice-to-have — see it confirmed active in
-  [operations.md](operations.md#health-checks).
+- **Os plugins Nginx/Apache do Certbot não suportam certificados de IP** —
+  apenas `--standalone`, `--webroot` e `--manual` suportam. O script de
+  inicialização usa `--webroot` e escreve seu próprio server block HTTPS na
+  mão (estágio 7) em vez de deixar um plugin reescrevê-lo.
+- **Certificados de IP exigem `--preferred-profile shortlived`**, o que
+  significa um **tempo de vida de 6 dias**, não os 90 dias usuais. O timer de
+  renovação do Certbot (checagens duas vezes por dia) é essencial aqui, não só
+  um extra desejável — veja ele confirmado ativo em
+  [operations.md](operations.md#verificações-de-saúde).
 
-HTTP always redirects to HTTPS (stage 7). If certificate issuance ever
-fails (rate limit, transient network issue), the startup script logs it and
-leaves Nginx serving plain HTTP rather than leaving it broken — a working
-site over HTTP beats a script that gives up entirely.
+O HTTP sempre redireciona para HTTPS (estágio 7). Se a emissão do certificado
+falhar (rate limit, problema de rede transitório), o script de inicialização
+registra isso e deixa o Nginx servindo HTTP puro em vez de deixá-lo quebrado —
+um site funcionando em HTTP é melhor que um script que desiste por completo.
 
 ## Shielded VM
 
-`infra/compute.tf` enables `enable_secure_boot`, `enable_vtpm`, and
-`enable_integrity_monitoring` — all three, at no extra cost, supported by
-the `ubuntu-2404-lts` image family used here.
+`infra/compute.tf` habilita `enable_secure_boot`, `enable_vtpm` e
+`enable_integrity_monitoring` — os três, sem custo extra, suportados pela
+família de imagens `ubuntu-2404-lts` usada aqui.
 
-## No secrets in the repository
+## Nenhum secret no repositório
 
-`.gitignore` blocks `.env*`, private key files (`*.pem`, `id_rsa*`,
-`id_ed25519*`), `*.tfstate`/`*.tfstate.backup`, `*.tfvars`, `.terraform/`,
-`credentials*.json`, and `backend.hcl`. Each has an `.example` counterpart
-committed instead (`terraform.tfvars.example`, `infra/backend.hcl.example`)
-so the shape of every required value is documented without exposing a real
-one. Notably:
+O `.gitignore` bloqueia `.env*`, arquivos de chave privada (`*.pem`,
+`id_rsa*`, `id_ed25519*`), `*.tfstate`/`*.tfstate.backup`, `*.tfvars`,
+`.terraform/`, `credentials*.json` e `backend.hcl`. Cada um tem um `.example`
+versionado no lugar (`terraform.tfvars.example`, `infra/backend.hcl.example`),
+de modo que o formato de cada valor obrigatório fica documentado sem expor um
+real. Notavelmente:
 
-- The **GCS bucket name** (`infra/backend.tf`) is never hardcoded — it
-  embeds the GCP project ID, which this repo does not publish. Terraform
-  reads it from the gitignored `infra/backend.hcl` via `-backend-config`
-  instead.
-- `ops/vm-start.sh` and `ops/vm-stop.sh` read `project_id`/`region`/`zone`
-  from the gitignored `infra/terraform.tfvars` for the same reason.
+- O **nome do bucket GCS** (`infra/backend.tf`) nunca é hardcoded — ele embute
+  o project ID do GCP, que este repositório não publica. O Terraform o lê do
+  `infra/backend.hcl` (no gitignore) via `-backend-config`.
+- `ops/vm-start.sh` e `ops/vm-stop.sh` leem `project_id`/`region`/`zone` do
+  `infra/terraform.tfvars` (no gitignore) pelo mesmo motivo.
 
-## Least-privilege budget scope
+## Escopo de menor privilégio do budget
 
-`infra/bootstrap/billing.tf`'s `google_billing_budget` is filtered to this
-project only (`budget_filter.projects`), not the whole billing account —
-see [free-tier.md](free-tier.md) for the full cost-control picture.
+O `google_billing_budget` de `infra/bootstrap/billing.tf` é filtrado só para
+este projeto (`budget_filter.projects`), não para a conta de billing inteira —
+veja [free-tier.md](free-tier.md) para o quadro completo de controle de custo.

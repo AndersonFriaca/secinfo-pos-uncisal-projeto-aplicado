@@ -1,42 +1,45 @@
 # Deployment
 
-## Prerequisites
+## Pré-requisitos
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
-- [gcloud CLI](https://cloud.google.com/sdk/docs/install), authenticated:
+- [gcloud CLI](https://cloud.google.com/sdk/docs/install), autenticado:
   `gcloud auth login`
-- An existing GCP project and an existing, open billing account linked to it
-- An SSH keypair (e.g. `~/.ssh/id_ed25519` / `id_ed25519.pub`)
+- Um projeto GCP existente e uma conta de billing aberta e existente vinculada
+  a ele
+- Um par de chaves SSH (por exemplo, `~/.ssh/id_ed25519` / `id_ed25519.pub`)
 
-Two GCP project-level APIs must be enabled before the first apply — Terraform
-doesn't enable them for you because enabling them itself requires
-`cloudresourcemanager.googleapis.com` to already be on:
+Duas APIs em nível de projeto GCP precisam estar habilitadas antes do primeiro
+apply — o Terraform não as habilita para você porque habilitá-las exige que
+`cloudresourcemanager.googleapis.com` já esteja ligada:
 
 ```bash
 gcloud services enable cloudresourcemanager.googleapis.com cloudbilling.googleapis.com compute.googleapis.com \
   --project=<your-project-id>
 ```
 
-## 1. Configure variables
+## 1. Configure as variáveis
 
-Copy the two example files and fill in your own values — **never commit the
-real copies**, both are gitignored:
+Copie os dois arquivos de exemplo e preencha com seus próprios valores —
+**nunca faça commit das cópias reais**, ambas estão no gitignore:
 
 ```bash
 cp terraform.tfvars.example infra/terraform.tfvars
 cp infra/backend.hcl.example infra/backend.hcl   # bucket name goes here after step 2
 ```
 
-`infra/terraform.tfvars` needs: `project_id`, `region` (default
-`us-east1`), `zone` (default `us-east1-b`), `ssh_username`,
-`ssh_public_key_path`, and optionally `operator_ssh_cidrs` (default `[]` =
-no public `:22`; reach the VM via `--tunnel-through-iap`). A separate
-`infra/bootstrap/terraform.tfvars` needs:
-`project_id`, `region`, `state_bucket_name` (must be globally unique —
-`<project-id>-state` is a safe convention), `billing_account_name` (find it
-with `gcloud billing accounts list`), and optionally
-`billing_alert_currency_code` / `billing_alert_amount` if your billing
-account's currency isn't USD — see [free-tier.md](free-tier.md#billing-budget).
+`infra/terraform.tfvars` precisa de: `project_id`, `region` (padrão
+`us-east1`), `zone` (padrão `us-east1-b`), `ssh_username`,
+`ssh_public_key_path` e, opcionalmente, `operator_ssh_cidrs` (padrão
+`["0.0.0.0/0"]` = `:22` público aberto para a banca avaliadora; restrinja a
+CIDRs específicos, por exemplo `["203.0.113.4/32"]`, para endurecer — em
+qualquer caso o `:22` é somente por chave e protegido por Fail2ban). Um
+`infra/bootstrap/terraform.tfvars` separado precisa de: `project_id`,
+`region`, `state_bucket_name` (precisa ser globalmente único —
+`<project-id>-state` é uma convenção segura), `billing_account_name` (encontre
+com `gcloud billing accounts list`) e, opcionalmente,
+`billing_alert_currency_code` / `billing_alert_amount` se a moeda da sua conta
+de billing não for USD — veja [free-tier.md](free-tier.md#orçamento-de-billing).
 
 ## 2. Bootstrap (state bucket + billing budget)
 
@@ -46,54 +49,55 @@ terraform init
 terraform apply
 ```
 
-This creates the two persistent resources described in
-[architecture.md](architecture.md). Copy the printed `state_bucket_name`
-output into `infra/backend.hcl`:
+Isto cria os dois recursos persistentes descritos em
+[architecture.md](architecture.md). Copie o output `state_bucket_name`
+impresso para `infra/backend.hcl`:
 
 ```hcl
 bucket = "<state_bucket_name output>"
 ```
 
-## 3. Point the main root at the remote backend
+## 3. Aponte o root principal para o backend remoto
 
 ```bash
 cd ../   # back to infra/
 terraform init -backend-config=backend.hcl -migrate-state
 ```
 
-Terraform asks to confirm copying the existing local state into the new GCS
-backend — accept it. From here on, `infra/`'s state lives in the bucket;
-`infra/bootstrap/`'s own state (the bucket resource itself) stays local and
-separate, by design.
+O Terraform pede confirmação para copiar o state local existente para o novo
+backend GCS — aceite. Daqui em diante, o state de `infra/` vive no bucket; o
+state próprio de `infra/bootstrap/` (o recurso do bucket em si) permanece
+local e separado, por design.
 
-## 4. Deploy the billable resources
+## 4. Faça o deploy dos recursos cobráveis
 
 ```bash
 terraform plan
 terraform apply
 ```
 
-This provisions the custom VPC/subnet, the three firewall rules, and the
-`e2-micro` instance running the startup script (see
-[architecture.md](architecture.md#startup-script-stages)). First boot takes
-a few minutes — packages install, Certbot requests a certificate, PM2 gets
-registered.
+Isto provisiona a VPC/subnet custom, as quatro regras de firewall e a
+instância `e2-micro` rodando o script de inicialização (veja
+[architecture.md](architecture.md#estágios-do-script-de-inicialização)). O
+primeiro boot leva alguns minutos — pacotes instalam, o Certbot pede um
+certificado, o PM2 é registrado.
 
-## 5. Verify
+## 5. Verifique
 
 ```bash
 terraform output instance_external_ip
 curl -I http://<ip>          # expect a 301 redirect to https
 curl -Ik https://<ip>        # expect a valid Let's Encrypt cert (302/502 on / is fine — no app deployed yet)
-gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --tunnel-through-iap   # key-only via IAP; a password prompt would mean something's wrong (use plain `ssh <user>@<ip>` only if your IP is in operator_ssh_cidrs)
+ssh <ssh_username>@<ip>                                                       # public :22 is open by default (key-only); a password prompt would mean something's wrong
+gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --tunnel-through-iap   # same VM via the IAP tunnel (works even if operator_ssh_cidrs is narrowed)
 ```
 
-Once you actually deploy a Next.js build to `/opt/app` and `pm2 start
-ecosystem.config.js && pm2 save` on the VM, `https://<ip>/` starts serving
-it instead of `502`.
+Assim que você de fato publicar um build Next.js em `/opt/app` e rodar `pm2
+start ecosystem.config.js && pm2 save` na VM, `https://<ip>/` passa a servir a
+aplicação em vez de `502`.
 
-## Day-to-day operation
+## Operação do dia a dia
 
-For starting/stopping the VM (which also handles the static-IP
-reserve/release dance), teardown, and health checks, see
+Para iniciar/parar a VM (o que também trata da dança de reserva/liberação do
+IP estático), teardown e verificações de saúde, veja
 [operations.md](operations.md).

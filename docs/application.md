@@ -1,44 +1,47 @@
-# Application
+# Aplicação
 
-The `web/` directory holds the project's Next.js 16 application (App Router,
-TypeScript, server-rendered). It provides a public landing page, self-service
-signup with email verification, server-only login, and an authenticated
-dashboard with logout. Firebase / GCP Identity Platform backs authentication;
-the browser only ever receives an httpOnly session cookie and a CSRF token —
-no API key, project ID, or Firebase config reaches the client bundle.
+O diretório `web/` contém a aplicação Next.js 16 do projeto (App Router,
+TypeScript, renderizada no servidor). Ela oferece uma landing page pública,
+cadastro self-service com verificação de e-mail, login somente no servidor e
+um dashboard autenticado com logout. O Firebase / GCP Identity Platform apoia
+a autenticação; o navegador recebe apenas um cookie de sessão httpOnly e um
+token CSRF — nenhuma API key, project ID ou config do Firebase chega ao bundle
+do cliente.
 
-## How it runs
+## Como roda
 
-- Built in GitHub Actions as a `next build` **standalone** bundle, never on
-  the VM (the e2-micro has 1 GB RAM).
-- Deployed to `/opt/app/releases/<sha>` with `/opt/app/current` flipped to the
-  new release; PM2 runs `node current/server.js` on port 3000
+- Construída no GitHub Actions como um bundle **standalone** do `next build`,
+  nunca na VM (a e2-micro tem 1 GB de RAM).
+- Publicada em `/opt/app/releases/<sha>` com `/opt/app/current` apontando para
+  o novo release; o PM2 roda `node current/server.js` na porta 3000
   (`infra/scripts/ecosystem.config.js`).
-- Nginx on the VM terminates TLS and reverse-proxies to `localhost:3000`
+- O Nginx na VM termina o TLS e faz reverse proxy para `localhost:3000`
   (`infra/scripts/startup.sh.tpl`).
 
 ## CI/CD
 
-| Workflow | Trigger | What it does |
+| Workflow | Gatilho | O que faz |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | pull request to `main` | `npm ci`, lint, typecheck, unit tests |
-| `.github/workflows/deploy.yml` | push to `main` | tests, standalone build, keyless GCP auth (Workload Identity Federation), resolve/start the VM, ship the bundle and run remote commands over an IAP tunnel (`gcloud compute scp/ssh --tunnel-through-iap`), write `/opt/app/.env.production`, reload PM2 as `appsvc`, poll `https://<ip>/` for HTTP 200 |
+| `.github/workflows/ci.yml` | pull request para `main` | `npm ci`, lint, typecheck, testes unitários, e guardrails estáticos de IAM/firewall do `infra/` |
+| `.github/workflows/deploy.yml` | push para `main` | testes, build standalone, autenticação GCP sem chave (Workload Identity Federation), resolve/inicia a VM, envia o bundle e roda comandos remotos por um túnel IAP (`gcloud compute scp/ssh --tunnel-through-iap`), escreve `/opt/app/.env.production`, recarrega o PM2 como `appsvc`, faz poll de `https://<ip>/` esperando HTTP 200 |
 
-The deploy workflow holds no long-lived GCP key **and no SSH key**: it
-authenticates through the Workload Identity pool provisioned in `infra/wif.tf`,
-and reaches the VM over an IAP tunnel where `gcloud` mints an ephemeral,
-IAM-scoped SSH key from the federated deploy service account. The app runs on
-the VM as a dedicated locked `appsvc` user. Every credential comes from GitHub
-Actions secrets: `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`,
-`GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`.
+O workflow de deploy não guarda nenhuma chave GCP de longa duração **nem
+chave SSH**: ele autentica pelo pool de Workload Identity provisionado em
+`infra/wif.tf` e alcança a VM por um túnel IAP, onde o `gcloud` gera uma chave
+SSH efêmera e limitada por IAM a partir da service account de deploy federada.
+A aplicação roda na VM como o usuário de sistema dedicado e travado `appsvc`.
+Toda credencial vem dos secrets do GitHub Actions: `GCP_PROJECT_ID`,
+`GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`,
+`IDENTITY_PLATFORM_API_KEY`.
 
-## OWASP Top 10 mitigations
+## Mitigações do OWASP Top 10
 
-The mapping of OWASP Top 10:2025 categories to the code that mitigates them is
-in the root [`README.md`](../README.md#application-security-owasp-top-10).
+O mapeamento das categorias do OWASP Top 10:2025 para o código que as mitiga
+está no [`README.md`](../README.md#segurança-da-aplicação-owasp-top-10) da
+raiz.
 
-## Planning history
+## Histórico de planejamento
 
-Requirements, design, task breakdown, and the independent Verifier's report
-are in
+Requisitos, design, quebra de tarefas e o relatório do Verifier independente
+estão em
 [`.specs/features/nextjs-secure-app/`](../.specs/features/nextjs-secure-app/).

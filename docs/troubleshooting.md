@@ -1,6 +1,6 @@
 # Troubleshooting
 
-## How to look, before guessing
+## Como olhar, antes de chutar
 
 ```bash
 # Boot-time script output — works even if SSH is broken:
@@ -8,63 +8,64 @@ gcloud compute instances get-serial-port-output app-vm --zone=<zone> --project=<
   | grep -iE "startup-script|error|failed"
 
 # SSH via gcloud's own managed key — bypasses a passphrase-locked local key.
-# Add --tunnel-through-iap unless your IP is in operator_ssh_cidrs (the
-# calling principal then needs roles/iap.tunnelResourceAccessor):
+# Public :22 is open by default; add --tunnel-through-iap when operator_ssh_cidrs
+# has been narrowed (the calling principal then needs
+# roles/iap.tunnelResourceAccessor):
 gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --project=<project_id> --tunnel-through-iap
 ```
 
-Search for `Script "startup-script" failed with error: exit status N` in
-the serial log — that means `set -euo pipefail` killed the script at
-whichever stage came right before it, and **every later stage never ran**
-(no Fail2ban, no cert, no PM2, depending on how early it died).
+Procure por `Script "startup-script" failed with error: exit status N` no log
+serial — isso significa que o `set -euo pipefail` matou o script em qualquer
+estágio imediatamente anterior, e **nenhum estágio posterior rodou** (sem
+Fail2ban, sem cert, sem PM2, dependendo de quão cedo ele morreu).
 
-## Two real bugs, found only by deploying for real
+## Dois bugs reais, encontrados só fazendo o deploy de verdade
 
-Both were invisible from reading the Terraform/shell alone — they only
-showed up once the VM actually booted.
+Ambos eram invisíveis lendo apenas o Terraform/shell — só apareceram depois
+que a VM de fato bootou.
 
-### 1. `systemctl reload sshd` fails on Ubuntu 24.04
+### 1. `systemctl reload sshd` falha no Ubuntu 24.04
 
-**Symptom:** the startup script dies immediately after Stage 2 (SSH
-hardening); Fail2ban, Certbot, and PM2 never run; HTTP serves Nginx's
-default page instead of the real site.
+**Sintoma:** o script de inicialização morre logo depois do Estágio 2
+(hardening de SSH); Fail2ban, Certbot e PM2 nunca rodam; o HTTP serve a página
+padrão do Nginx em vez do site real.
 
-**Cause:** Ubuntu 24.04's systemd unit for SSH is named `ssh.service`, not
-`sshd.service`. `reload sshd` fails with `Unit sshd.service not found`,
-and under `set -e` that kills the whole script.
+**Causa:** a unit do systemd para SSH no Ubuntu 24.04 se chama `ssh.service`,
+não `sshd.service`. `reload sshd` falha com `Unit sshd.service not found`, e
+sob `set -e` isso mata o script inteiro.
 
-**Fix (already applied):** `infra/scripts/startup.sh.tpl` uses
-`systemctl reload ssh`.
+**Correção (já aplicada):** `infra/scripts/startup.sh.tpl` usa `systemctl
+reload ssh`.
 
-### 2. Nginx keeps a stale certificate path after the IP changes
+### 2. O Nginx mantém um caminho de certificado obsoleto depois que o IP muda
 
-**Symptom:** Certbot successfully issues a certificate for the VM's
-*current* IP, but HTTPS still fails or serves a nonexistent cert — `nginx
--T` shows `ssl_certificate` pointing at `/etc/letsencrypt/live/<old-ip>/`.
+**Sintoma:** o Certbot emite com sucesso um certificado para o IP *atual* da
+VM, mas o HTTPS ainda falha ou serve um cert inexistente — `nginx -T` mostra
+`ssl_certificate` apontando para `/etc/letsencrypt/live/<old-ip>/`.
 
-**Cause:** the HTTPS server block is written once and guarded only by "does
-the file exist" — after the very first successful boot, later boots (e.g.
-after switching to a different IP) skip rewriting it, even though a fresh
-certificate was issued for the new IP.
+**Causa:** o server block HTTPS é escrito uma vez e protegido apenas por "o
+arquivo existe" — depois do primeiro boot bem-sucedido, boots posteriores (por
+exemplo, depois de trocar para um IP diferente) pulam a reescrita dele, mesmo
+que um certificado novo tenha sido emitido para o novo IP.
 
-**Fix (already applied):** the guard also rewrites the file when its
-embedded IP no longer matches the current one:
+**Correção (já aplicada):** o guard também reescreve o arquivo quando o IP
+embutido nele não bate mais com o atual:
 
 ```bash
 if [ "$CERT_OBTAINED" = true ] && { [ ! -f "$HTTPS_SITE" ] || ! grep -qF "/etc/letsencrypt/live/$PUBLIC_IP/" "$HTTPS_SITE"; }; then
 ```
 
-If you ever see this symptom again on a modified script, check that
-whichever "already configured" guard you added checks the *content*
-matches the current state, not just that a file is present.
+Se você algum dia vir esse sintoma de novo em um script modificado, verifique
+que o guard de "já configurado" que você adicionou checa se o *conteúdo* bate
+com o estado atual, não apenas se um arquivo está presente.
 
-## Common apply-time errors
+## Erros comuns no momento do apply
 
-| Error | Cause | Fix |
+| Erro | Causa | Correção |
 | --- | --- | --- |
-| `googleapi: Error 403 ... requires a quota project` | Application Default Credentials have no quota project set | `gcloud auth application-default set-quota-project <project-id>` |
-| `googleapi: Error 403 ... Cloud Billing API has not been used` / `Cloud Resource Manager API has not been used` | `user_project_override = true` on the provider means *every* API call now needs the caller project's own APIs enabled | `gcloud services enable cloudresourcemanager.googleapis.com cloudbilling.googleapis.com --project=<project-id>` |
-| `googleapi: Error 403 ... Compute Engine API has not been used` | `compute.googleapis.com` not enabled yet | `gcloud services enable compute.googleapis.com --project=<project-id>` |
-| `Error creating Budget: ... Error 400` with no further detail | `billing_alert_currency_code` doesn't match the billing account's actual currency | `gcloud billing accounts describe <account-id>` to check, then set the matching currency in `infra/bootstrap/terraform.tfvars` |
-| `Changing the machine_type, ... shielded_instance_config, ... network_interface ... on a started instance requires stopping it` | An in-place change needs the instance stopped first | Already handled — `allow_stopping_for_update = true` is set on the instance |
-| SSH `Permission denied (publickey)` right after the metadata shows the key is correct | The guest agent hasn't propagated the key to the VM yet, or your local private key needs a passphrase your shell can't supply | Wait ~30s and retry, or use `gcloud compute ssh ... --tunnel-through-iap` (uses its own managed key, sidesteps a locked local key; needed unless your IP is in `operator_ssh_cidrs`) |
+| `googleapi: Error 403 ... requires a quota project` | As Application Default Credentials não têm quota project definido | `gcloud auth application-default set-quota-project <project-id>` |
+| `googleapi: Error 403 ... Cloud Billing API has not been used` / `Cloud Resource Manager API has not been used` | `user_project_override = true` no provider significa que *toda* chamada de API agora precisa das APIs do próprio projeto do chamador habilitadas | `gcloud services enable cloudresourcemanager.googleapis.com cloudbilling.googleapis.com --project=<project-id>` |
+| `googleapi: Error 403 ... Compute Engine API has not been used` | `compute.googleapis.com` ainda não habilitada | `gcloud services enable compute.googleapis.com --project=<project-id>` |
+| `Error creating Budget: ... Error 400` sem mais detalhes | `billing_alert_currency_code` não bate com a moeda real da conta de billing | `gcloud billing accounts describe <account-id>` para checar, depois defina a moeda correta em `infra/bootstrap/terraform.tfvars` |
+| `Changing the machine_type, ... shielded_instance_config, ... network_interface ... on a started instance requires stopping it` | Uma mudança in-place precisa da instância parada primeiro | Já tratado — `allow_stopping_for_update = true` está definido na instância |
+| SSH `Permission denied (publickey)` logo depois de o metadata mostrar a chave correta | O guest agent ainda não propagou a chave para a VM, ou sua chave privada local precisa de uma passphrase que seu shell não consegue fornecer | Espere ~30s e tente de novo, ou use `gcloud compute ssh ... --tunnel-through-iap` (usa a própria chave gerenciada, contorna uma chave local travada; necessário quando `operator_ssh_cidrs` foi restrito e seu IP ficou de fora) |

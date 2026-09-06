@@ -1,24 +1,24 @@
-# Documentation
+# Documentação
 
-Reference documentation for the project's GCP infrastructure (Terraform).
-Start with the root [`README.md`](../README.md) for a quickstart — this
-folder goes deeper on each topic.
+Documentação de referência para a infraestrutura GCP do projeto (Terraform).
+Comece pelo [`README.md`](../README.md) da raiz para um quickstart — esta
+pasta aprofunda cada tópico.
 
-| Doc | Covers |
+| Doc | Cobre |
 | --- | --- |
-| [application.md](application.md) | The Next.js app in `web/`: how it runs, CI/CD, OWASP Top 10 mitigations |
-| [architecture.md](architecture.md) | The two-Terraform-root design, component list, request flow |
-| [deployment.md](deployment.md) | Step-by-step bootstrap → deploy, variables reference |
-| [operations.md](operations.md) | Day-to-day: starting/stopping the VM, checking service health, teardown |
-| [security.md](security.md) | Hardening measures and the reasoning behind each one |
-| [free-tier.md](free-tier.md) | Every setting that keeps this inside GCP's Always Free tier, and why |
-| [troubleshooting.md](troubleshooting.md) | Real bugs found deploying this for real, and how to diagnose similar ones |
+| [application.md](application.md) | A aplicação Next.js em `web/`: como roda, CI/CD, mitigações do OWASP Top 10 |
+| [architecture.md](architecture.md) | O design com dois roots Terraform, a lista de componentes, o fluxo de requisição |
+| [deployment.md](deployment.md) | Passo a passo do bootstrap → deploy, referência de variáveis |
+| [operations.md](operations.md) | Dia a dia: iniciar/parar a VM, checar a saúde dos serviços, teardown |
+| [security.md](security.md) | Medidas de hardening e o raciocínio por trás de cada uma |
+| [free-tier.md](free-tier.md) | Toda configuração que mantém o projeto dentro do Always Free tier do GCP, e por quê |
+| [troubleshooting.md](troubleshooting.md) | Bugs reais encontrados ao fazer o deploy de verdade, e como diagnosticar casos parecidos |
 
-Planning artifacts (requirements, design decisions, task breakdown, the
-independent Verifier's report) live in
+Os artefatos de planejamento (requisitos, decisões de design, quebra de
+tarefas, o relatório do Verifier independente) ficam em
 [`.specs/features/gcp-infra-terraform/`](../.specs/features/gcp-infra-terraform/)
-— that's the historical record of *why* things were built this way; the
-docs here are the current-state reference for *how to use* what was built.
-Agent-specific operating notes (e.g. "always use `ops/vm-start.sh`, never
-call `gcloud compute instances start` directly") are in
-[`CLAUDE.md`](../CLAUDE.md).
+— esse é o registro histórico do *porquê* das coisas terem sido construídas
+assim; a documentação aqui é a referência do estado atual sobre *como usar* o
+que foi construído. Notas de operação específicas para agentes (por exemplo,
+"sempre use `ops/vm-start.sh`, nunca chame `gcloud compute instances start`
+diretamente") estão em [`CLAUDE.md`](../CLAUDE.md).

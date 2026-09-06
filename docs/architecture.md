@@ -1,90 +1,95 @@
-# Architecture
+# Arquitetura
 
-## Two Terraform roots, split by blast radius
+## Dois roots Terraform, separados por raio de impacto
 
 ```
 infra/bootstrap/          infra/
 ┌──────────────────┐      ┌──────────────────────────────┐
 │ GCS state bucket  │      │ Custom VPC + subnet          │
-│ Billing budget    │◄─────┤ firewall: IAP-SSH, 80, 443   │
-│ (own local state, │ state│ e2-micro instance            │
-│  never destroyed) │      │ (backed by the gcs bucket)   │
-└──────────────────┘      └──────────────────────────────┘
-   persistent, free            billable, torn down by
-                                `terraform destroy` here only
+│ Billing budget    │◄─────┤ firewall: SSH, IAP-SSH,      │
+│ (own local state, │ state│          80, 443             │
+│  never destroyed) │      │ e2-micro instance            │
+└──────────────────┘      │ (backed by the gcs bucket)   │
+   persistent, free       └──────────────────────────────┘
+                              billable, torn down by
+                               `terraform destroy` here only
 ```
 
-- **`infra/bootstrap/`** — the only two resources meant to *outlive* a
-  teardown: the GCS bucket holding `infra/`'s remote state, and the billing
-  budget alert. Both are free regardless of what else exists in the
-  project, so they stay up even after `infra/` is fully destroyed —
-  spend monitoring never lapses, and the state survives a wiped laptop.
-  Applied once, with its own local state, rarely touched again.
-- **`infra/`** — every billable resource: the network, firewall, and the
-  compute instance. Its state lives in the bucket the bootstrap root
-  created. `terraform destroy` run here can never reach into
-  `infra/bootstrap/` — they're structurally separate roots, not just
-  protected by a lifecycle flag.
+- **`infra/bootstrap/`** — os únicos dois recursos feitos para *sobreviver* a
+  um teardown: o bucket GCS que guarda o state remoto de `infra/` e o alerta
+  de billing budget. Ambos são gratuitos independentemente do que mais exista
+  no projeto, então continuam de pé mesmo depois de `infra/` ser totalmente
+  destruído — o monitoramento de gastos nunca é interrompido e o state
+  sobrevive a um notebook formatado. Aplicado uma vez, com seu próprio state
+  local, raramente tocado de novo.
+- **`infra/`** — todo recurso cobrável: a rede, o firewall e a instância de
+  compute. Seu state fica no bucket que o root de bootstrap criou. Um
+  `terraform destroy` rodado aqui nunca consegue alcançar `infra/bootstrap/` —
+  são roots estruturalmente separados, não apenas protegidos por uma flag de
+  lifecycle.
 
-Why not one root with `lifecycle { prevent_destroy = true }` on the
-bucket? Because `prevent_destroy` aborts Terraform's *entire* destroy
-plan the moment it hits that resource — it wouldn't let `terraform
-destroy` remove anything else either. Two roots is what makes "destroy
-everything billable, keep the free stuff" actually work.
+Por que não um único root com `lifecycle { prevent_destroy = true }` no
+bucket? Porque `prevent_destroy` aborta o plano de destroy *inteiro* do
+Terraform assim que ele encontra aquele recurso — não deixaria o `terraform
+destroy` remover mais nada também. Dois roots é o que faz "destruir tudo que é
+cobrável, manter o que é gratuito" realmente funcionar.
 
-## Request flow
+## Fluxo de requisição
 
 ```
 Internet
    │
    ▼
-Firewall (custom VPC, never GCP's `default`): :22 from the IAP range only
-   │          by default (public :22 opt-in via var.operator_ssh_cidrs), plus :80 and :443
+Firewall (custom VPC, never GCP's `default`): :22 público (aberto para a banca,
+   │          restringível via var.operator_ssh_cidrs), :22 da faixa IAP (deploy
+   │          da CI sem chave), mais :80 e :443
    │
    ▼
 e2-micro instance (Ubuntu 24.04, Shielded VM)
    │
-   ├─ :22  → sshd — IAP range only by default (key-only, Fail2ban jail);
-   │          direct CIDR access is opt-in via var.operator_ssh_cidrs
+   ├─ :22  → sshd — público + faixa IAP (somente chave, jail do Fail2ban;
+   │          var.operator_ssh_cidrs restringe a origem pública)
    ├─ :80  → Nginx → 301 redirect to :443
    └─ :443 → Nginx (Let's Encrypt IP certificate)
                └─ proxy_pass → localhost:3000 (PM2-managed Next.js app)
 ```
 
-The reverse proxy at `:3000` returns `502` until a Next.js build is
-actually deployed there — that's expected; deploying the app is a
-separate feature (see `prd.md`'s Eixo 3).
+O reverse proxy em `:3000` retorna `502` até que um build Next.js seja de fato
+publicado ali — isso é esperado; o deploy da aplicação é uma feature separada
+(veja o Eixo 3 do `prd.md`).
 
-## Components
+## Componentes
 
-| File | Resource(s) | Purpose |
+| Arquivo | Recurso(s) | Propósito |
 | --- | --- | --- |
-| `infra/bootstrap/storage.tf` | `google_storage_bucket` | Terraform remote state for `infra/` |
-| `infra/bootstrap/billing.tf`, `billing-data.tf`, `billing-variables.tf` | `google_billing_budget`, `google_project_service` | Spend alert (pattern from [eatonc/actual-gcp](https://github.com/eatonc/actual-gcp)) |
-| `infra/network.tf` | `google_compute_network`, `google_compute_subnetwork` | Dedicated custom VPC — no inherited permissive rules |
-| `infra/firewall.tf` | `google_compute_firewall` | Least-privilege ingress: SSH from the IAP range (always) and from `var.operator_ssh_cidrs` (opt-in), HTTP, HTTPS |
-| `infra/compute.tf` | `google_compute_instance` | The VM itself — every setting pinned for free-tier + Shielded VM |
-| `infra/scripts/startup.sh.tpl` | (instance metadata) | Idempotent boot-time provisioning — see the stage list below |
-| `infra/scripts/ecosystem.config.js` | (copied to `/opt/app`) | PM2 process definition for the future Next.js app |
-| `infra/backend.tf` | `terraform { backend "gcs" {} }` | Points at the bootstrap bucket via `-backend-config` (never a hardcoded bucket name — see [security.md](security.md)) |
-| `ops/vm-start.sh`, `ops/vm-stop.sh` | (imperative `gcloud` calls) | Reserve/attach/release a static IP around the VM's actual up-time — see [operations.md](operations.md) |
+| `infra/bootstrap/storage.tf` | `google_storage_bucket` | State remoto do Terraform para `infra/` |
+| `infra/bootstrap/billing.tf`, `billing-data.tf`, `billing-variables.tf` | `google_billing_budget`, `google_project_service` | Alerta de gastos (padrão vindo de [eatonc/actual-gcp](https://github.com/eatonc/actual-gcp)) |
+| `infra/network.tf` | `google_compute_network`, `google_compute_subnetwork` | VPC custom dedicada — sem regras permissivas herdadas |
+| `infra/firewall.tf` | `google_compute_firewall` | Ingress de menor privilégio: SSH público (restringível via `var.operator_ssh_cidrs`), SSH da faixa IAP (sempre), HTTP, HTTPS |
+| `infra/compute.tf` | `google_compute_instance` | A própria VM — cada configuração fixada para free-tier + Shielded VM |
+| `infra/scripts/startup.sh.tpl` | (instance metadata) | Provisionamento idempotente no boot — veja a lista de estágios abaixo |
+| `infra/scripts/ecosystem.config.js` | (copiado para `/opt/app`) | Definição do processo PM2 para a futura aplicação Next.js |
+| `infra/backend.tf` | `terraform { backend "gcs" {} }` | Aponta para o bucket de bootstrap via `-backend-config` (nunca um nome de bucket hardcoded — veja [security.md](security.md)) |
+| `ops/vm-start.sh`, `ops/vm-stop.sh` | (chamadas imperativas de `gcloud`) | Reserva/anexa/libera um IP estático em torno do tempo real de atividade da VM — veja [operations.md](operations.md) |
 
-## Startup script stages
+## Estágios do script de inicialização
 
-`infra/scripts/startup.sh.tpl` runs on every boot (GCP re-runs
-`metadata.startup-script` each time) and is idempotent stage by stage —
-each one guards itself so a re-run is a safe no-op where nothing changed:
+`infra/scripts/startup.sh.tpl` roda em todo boot (o GCP re-executa
+`metadata.startup-script` a cada vez) e é idempotente estágio por estágio —
+cada um se protege sozinho, de modo que um re-run é um no-op seguro onde nada
+mudou:
 
-1. Base packages (`nginx`, `fail2ban`, `snapd`, `nodejs`, `npm`)
-2. SSH hardening — `PasswordAuthentication no`
-3. Fail2ban `sshd` jail — 4 attempts, 24h ban
-4. Certbot install via `snap` (not `apt` — see [security.md](security.md))
-5. Base HTTP-only Nginx site (serves the ACME challenge)
-6. Obtain a Let's Encrypt IP-address certificate
-7. HTTPS server block + HTTP→HTTPS redirect
-8. Confirm/enable Certbot's renewal timer
-9. PM2 install + systemd startup registration
-10. PM2 app directory + Nginx reverse proxy to `localhost:3000`
+1. Pacotes base (`nginx`, `fail2ban`, `snapd`, `curl`, `ca-certificates`)
+1b. Node.js 24 LTS via NodeSource (o `apt` do Ubuntu 24.04 traz o Node 18)
+2. Hardening de SSH — `PasswordAuthentication no`
+3. Jail `sshd` do Fail2ban — 4 tentativas, ban de 24h
+4. Instalação do Certbot via `snap` (não `apt` — veja [security.md](security.md))
+5. Site Nginx base só em HTTP (serve o desafio ACME) + `server_tokens off`
+6. Obtenção de um certificado de endereço IP da Let's Encrypt
+7. Server block HTTPS + redirect HTTP→HTTPS
+8. Confirma/habilita o timer de renovação do Certbot
+9. Usuário de serviço `appsvc` + instalação do PM2 + registro no systemd (`pm2-appsvc`)
+10. Diretório `/opt/app` + reverse proxy do Nginx para `localhost:3000`
 
-See [troubleshooting.md](troubleshooting.md) for two real bugs found only
-by running this against a live VM.
+Veja [troubleshooting.md](troubleshooting.md) para dois bugs reais
+encontrados apenas ao rodar isto contra uma VM ao vivo.
