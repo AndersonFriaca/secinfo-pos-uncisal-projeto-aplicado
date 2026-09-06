@@ -103,12 +103,13 @@ code, and only surfaces at deploy time.
 
 ## Handoff
 
-**Feature**: `nextjs-secure-app`
-**Phase**: Execute complete through T30 (all 30 tasks committed across 11 phases). Independent Verifier pending — the orchestrator dispatches it next.
-**Completed**: full `web/` Next.js 16 app (134 unit tests passing; lint, typecheck, build clean); `infra/app.tf` / `infra/firestore.tf` / `infra/wif.tf` (terraform fmt + validate clean on `infra/` and `infra/bootstrap/`); `infra/scripts/startup.sh.tpl` (Node 22 LTS from NodeSource, `/opt/app` chowned, `server_tokens off`); `infra/scripts/ecosystem.config.js` (standalone `node current/server.js`); `.github/workflows/ci.yml` (PR test gate) and `.github/workflows/deploy.yml` (WIF keyless deploy). README documents four OWASP Top 10:2025 categories with verified file paths; `docs/application.md` added.
-**Final gate (T30)**: `npm run lint && npm run typecheck && npm test && npm run build` all pass — 134 tests / 13 files. `terraform fmt -check -recursive infra`, `terraform -chdir=infra validate`, `terraform -chdir=infra/bootstrap validate` all pass. `bash -n` on the de-templated startup script passes; both workflow YAMLs parse. `git status --porcelain` clean; `git ls-files` carries no `.env`, key, or project identifier.
+**Feature**: `nextjs-secure-app` — **COMPLETE**. Execute done (T1-T30, 5 sequential sub-agent batches), independent Verifier **PASS** on re-verification 1/3, minor residual gaps R1/R3 cleaned up.
+**Phase**: done. `validate_state.py nextjs-secure-app` exits 0. `validation.md` verdict PASS.
+**Completed**: full `web/` Next.js 16 app (**149 unit tests** / 15 files passing; lint, typecheck, build clean); `infra/app.tf` / `infra/firestore.tf` / `infra/wif.tf` (terraform fmt + validate clean on `infra/` and `infra/bootstrap/`); `infra/scripts/startup.sh.tpl` (Node 22 LTS from NodeSource, `/opt/app` chowned, `server_tokens off`); `infra/scripts/ecosystem.config.js` (standalone `node current/server.js`); `.github/workflows/ci.yml` (PR test gate) and `.github/workflows/deploy.yml` (WIF keyless deploy). README documents four OWASP Top 10:2025 categories with verified file paths; `docs/application.md` added.
+**Verifier findings resolved**: 7 gaps from the first FAIL pass fixed in `c3a21d0..63ef549` (CSRF constant-time proof, `/dashboard` no-store assertion, CSRF cookie attribute assertions, unverified-email→`/verify-email` redirect via `getSessionState`, SEC-18 relabel, landing-nav helper+tests, X-Forwarded-For trust note). Re-verification: all 3 previously-surviving mutants killed, no regression. Residual R1/R3 (dashboard-guard helper + test, nav describe label) fixed in `f16468d`/`a26927272`. Carried spec-precision gaps documented in `validation.md`: 307-vs-303 redirects (framework constraint), dev-mode `'unsafe-eval'`, inspection-only ACs.
+**Feature commit range**: `cc46312..HEAD` (~41 commits on `main`).
 **In progress**: nothing.
-**Next step**: run the independent Verifier over the feature diff (commits `5ed6e94^..HEAD` on `main` roughly; the feature's own range), then hand to the operator.
+**Next step**: operator live steps below. Also: `.specs/LESSONS.md` + `lessons.json` hold 8 candidate lessons (L-001..L-008) from the Verifier — review/confirm when convenient.
 
 ### Operator live steps (deferred — need an authenticated GCP account + a running VM)
 
