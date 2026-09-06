@@ -973,3 +973,260 @@ VM.
 6. **Carried from Amendment 1 — Minor.** `infra/scripts/startup.sh.tpl:244-257`
    still duplicates `infra/scripts/ecosystem.config.js` with only a comment
    enforcing parity. Add a `diff`-based gate.
+
+---
+
+## Amendment 2 — fix round 2 (G6 + guard hardening)
+
+**Date**: 2026-09-06
+**Diff range**: `80e69a1..HEAD` (`9f11dc5`, `f631ef7`, `5cfcd77`, `bda5cad`)
+**Verifier**: independent sub-agent (author ≠ verifier), read-only over the real tree
+**Iteration**: fix→re-verify 2 of 3 for Amendment 2
+
+**Verdict**: **PASS ✅ — G6 closed, S6/S7/S8/S10 guards bite.** Every gate is green,
+the real tree was never mutated, and the four evasions the last round ranked are
+now killed by CI *for the exact offenders named*. Two new grounded enforcement
+residuals were found (both Minor, both cheap): the read-only guard is a verb
+**denylist** rather than an allowlist, and the G6 fix itself has no regression
+guard. Neither blocks the feature.
+
+### G6 — close-out
+
+`infra/compute.tf:54` now sets `block-project-ssh-keys = "TRUE"` inside the
+instance `metadata` map, alongside the operator's `ssh-keys` entry
+(`infra/compute.tf:47`) and `startup-script`.
+
+**Doc citation 1 — where the key lands.** Compute Engine, "About SSH
+connections" (`https://docs.cloud.google.com/compute/docs/instances/ssh`,
+fetched 2026-09-06), `gcloud` section, verbatim:
+
+> "Your public SSH key is stored in project metadata. If Compute Engine can't
+> store the SSH key in project metadata, for example, because
+> `block-project-ssh-keys` is set to `TRUE`, Compute Engine stores the SSH key
+> in instance metadata."
+
+**Doc citation 2 — the operator's instance-level key is unaffected.** Compute
+Engine, "Restrict SSH keys from VMs"
+(`https://docs.cloud.google.com/compute/docs/connect/restrict-ssh-keys`,
+section "Block project SSH keys from VMs that use metadata-based SSH keys"),
+verbatim:
+
+> "You can prevent VMs from accepting SSH keys that are stored in project
+> metadata by blocking project SSH keys from VMs."
+> "Caution: Users with SSH keys in instance metadata can access VMs that block
+> project SSH keys."
+
+So `block-project-ssh-keys` blocks only the *project* key source;
+`infra/compute.tf:47`'s instance-level `ssh-keys` entry keeps working. ✅
+
+**Grounding beyond the docs — the gcloud implementation.** The doc's "can't
+store … for example, because" phrasing leaves open whether gcloud *attempts* a
+project write first. It does not. Locally installed Cloud SDK **583.0.0**,
+`lib/googlecloudsdk/command_lib/compute/ssh_utils.py`, `EnsureSSHKeyExists`
+(`:859`) dispatches on the instance's own metadata *before* any write:
+
+```python
+elif _MetadataHasBlockProjectSshKeys(instance.metadata):   # :915
+      keys_newly_added = self.EnsureSSHKeyIsInInstance(...)  # instances.setMetadata
+else:
+      try:
+        keys_newly_added = self.EnsureSSHKeyIsInProject(...)  # projects.setCommonInstanceMetadata
+      except SetProjectMetadataError:
+        ...
+        keys_newly_added = self.EnsureSSHKeyIsInInstance(...)
+```
+
+`_MetadataHasBlockProjectSshKeys` (`:517-529`) returns
+`matching_values[0].lower() == 'true'`, so the literal `"TRUE"` in
+`compute.tf:54` matches. The `else` branch — the only caller of
+`_SetProjectMetadata` → `projects.SetCommonInstanceMetadata`
+(`ssh_utils.py:733-751`) — is **unreachable** on this VM. The taken branch calls
+`_SetInstanceMetadata` → `instances.SetMetadata` (`ssh_utils.py:759-785`), a
+**zonal** operation, authorized by instance-scoped
+`compute.instances.setMetadata` inside `roles/compute.instanceAdmin.v1`
+(`infra/wif.tf:100-106`) and polled with `compute.zoneOperations.get`
+(`infra/wif.tf:147`). **No project-level metadata write occurs, so
+`compute.projects.setCommonInstanceMetadata` is not needed.** G6 closed.
+
+**One doc caveat, recorded rather than swept aside.** The IAP guide's
+"Permissions details" table
+(`https://docs.cloud.google.com/iap/docs/using-tcp-forwarding`, fetched
+2026-09-06) still lists, verbatim, for the scenario **"Not using OS Login"**:
+`compute.instances.setMetadata`, `compute.projects.setCommonInstanceMetadata`,
+`compute.globalOperations.get` — with **no `block-project-ssh-keys` carve-out**,
+and its worked example repeats all three together. Read literally that is a
+project-level permission this deploy SA does not hold. It is not treated as a
+FAIL because the table is demonstrably the **union of both branches**, not the
+minimum for either: `compute.instances.setMetadata` is used *only* on the
+blocked-keys branch and `compute.projects.setCommonInstanceMetadata` *only* on
+the unblocked one, so the two can never both be necessary for one invocation.
+The branch actually taken is settled above by the shipped gcloud source, which
+outranks a coarse scenario table. Live-apply confirmation remains the operator
+step already recorded in `.specs/STATE.md`.
+
+### Final `deploy.yml` permission map
+
+Every `gcloud compute …` call in `.github/workflows/deploy.yml`, the permission
+it needs, and the grant that supplies it. Grant sites:
+**IA** = instance-scoped `roles/compute.instanceAdmin.v1` (`infra/wif.tf:100-106`);
+**IAP** = instance-scoped `roles/iap.tunnelResourceAccessor` (`infra/wif.tf:108-114`);
+**SAU** = SA-scoped `roles/iam.serviceAccountUser` (`infra/wif.tf:116-120`);
+**CR** = custom project role `deployVmOperator` (`infra/wif.tf:138-150`, bound at `:152-156`);
+**WIF** = repo-scoped `roles/iam.workloadIdentityUser` (`infra/wif.tf:58-62`).
+
+| `deploy.yml` call | Permission required | Scope | Granted by | OK? |
+| --- | --- | --- | --- | --- |
+| `auth@v2` WIF token exchange (`:52-57`) | `iam.workloadIdentityUser` | principalSet (repo) | WIF (`wif.tf:60`) | ✅ |
+| `instances describe` (`:76`, `:82`, `:90`) | `compute.instances.get` | instance | IA | ✅ |
+| `instances start` (`:79`) | `compute.instances.start` | instance | IA | ✅ |
+| `instances start` — VM has an attached SA | `iam.serviceAccounts.actAs` | service account | SAU (target `wif.tf:96-98`) | ✅ |
+| `instances start` — poll the zonal operation | `compute.zoneOperations.get` | project | CR (`wif.tf:147`) | ✅ |
+| `ssh`/`scp --tunnel-through-iap` (`:111`, `:115`, `:117`, `:144`, `:146`, `:156`) — open the tunnel | `iap.tunnelInstances.accessViaIAP` | instance | IAP | ✅ |
+| same — instance lookup | `compute.instances.get` | instance | IA | ✅ |
+| same — instance enumeration | `compute.instances.list` | project | CR (`wif.tf:145`) | ✅ |
+| same — project probe (`ssh`/`scp` only) | `compute.projects.get` | project | CR (`wif.tf:146`) | ✅ |
+| same — publish the ephemeral key (blocked-keys branch, the one taken) | `compute.instances.setMetadata` | instance | IA | ✅ **G6** |
+| same — poll the metadata-write zonal operation | `compute.zoneOperations.get` | project | CR (`wif.tf:147`) | ✅ |
+| same — SSH to a VM using a service account | `iam.serviceAccounts.actAs` | service account | SAU | ✅ |
+| `curl https://$IP/` (`:166`) | none (public `:443`) | — | `infra/firewall.tf:51-61` | ✅ |
+
+**Unaccounted cells: none.** Every call maps to a granted permission.
+
+**Grant-side leftovers** (both benign, both read-only):
+
+- `compute.globalOperations.get` (`wif.tf:144`) was needed to poll the
+  *project*-metadata write. With `block-project-ssh-keys = "TRUE"` that write
+  never happens, so this permission is now dead on the taken path. It is
+  harmless (a global-operation *read*) and is exactly what the IAP doc lists for
+  the non-OS-Login scenario, so keeping it is defensible belt-and-braces; a
+  future tightening could drop it.
+- `roles/compute.instanceAdmin.v1` is still broader per-instance than
+  `get`+`start`+`setMetadata`, but is instance-bound with no project reach —
+  unchanged and still acceptable.
+
+### Guard-kill verification (throwaway `git worktree --detach`, real tree untouched)
+
+The four `iac-guardrails` step bodies were extracted from
+`.github/workflows/ci.yml` with `yaml.safe_load` (no hand-transcription) and run
+with `bash` from the root of a `git worktree add --detach HEAD` scratch. Real-tree
+`git status --porcelain` was **empty before, between every mutation, and after**;
+both scratch worktrees were removed with `--force` + `git worktree prune`.
+
+Guard numbering: **1** = "Deploy SA holds no predefined project role"
+(`ci.yml:48-66`), **2** = "Custom project role stays read-only" (`ci.yml:68-80`),
+**3** = "No firewall rule opens tcp:22 to 0.0.0.0/0" (`ci.yml:82-110`),
+**4** = "allow_ssh firewall rule stays count-gated" (`ci.yml:112-119`).
+
+**Baseline (unmutated `HEAD`)**: guards 1/2/3/4 all **exit 0** — no false
+positive. Re-confirmed after every revert.
+
+| # | Mutation | Guard | Result |
+| --- | --- | --- | --- |
+| **S6** | `infra/wif.tf:154` `role = google_project_iam_custom_role.deploy_vm_operator.id` → `role = "roles/editor"`, resource name kept | 1 | ✅ **KILLED** — `::error::deploy_vm_operator binding must use google_project_iam_custom_role.deploy_vm_operator.id, not a predefined roles/ literal.`, exit 1 |
+| **S10** | added `"compute.instances.setMetadata"` to `deploy_vm_operator.permissions` | 2 | ✅ **KILLED** — `::error::deployVmOperator custom role gained a mutating permission…`, exit 1 |
+| S10c | added `"compute.projects.setCommonInstanceMetadata"` to the same list | 2 | ✅ **KILLED** — exit 1 |
+| **S8a** | `infra/variables.tf:40` `default = []` → `default = ["0.0.0.0/0"]` | 3 | ✅ **KILLED** — `::error::operator_ssh_cidrs default must not contain 0.0.0.0/0.`, exit 1 |
+| **S8b** | appended `operator_ssh_cidrs = ["0.0.0.0/0"]` to root `terraform.tfvars.example` | 3 | ✅ **KILLED** — `::error::terraform.tfvars.example sets operator_ssh_cidrs to 0.0.0.0/0.`, exit 1 |
+| **S7** | **new file** `infra/extra.tf` with a `google_compute_firewall` allowing `tcp:22` from `0.0.0.0/0` (`terraform fmt -check` exit 0, i.e. invisible to fmt) | 3 | ✅ **KILLED** — `::error::A google_compute_firewall rule allows tcp:22 from 0.0.0.0/0: resource "google_compute_firewall" "extra_ssh" {`, exit 1 |
+
+**6/6 targeted mutations killed. S6, S7, S8 and S10 are closed for the offenders
+the last round named.** Prior-round S6/S7/S8/S10 are now dead.
+
+**New surviving mutants (probing the hardened guards' edges):**
+
+| # | Mutation | Guard | Result | Why it evades |
+| --- | --- | --- | --- | --- |
+| **E5** | **deleted `block-project-ssh-keys = "TRUE"` from `infra/compute.tf:54`** — i.e. reverted the entire G6 fix | 1-4 | ❌ **survived** — all four exit 0, `terraform fmt -check -recursive infra` exit 0 | No guard reads `infra/compute.tf`. The G6 fix's downstream *consequence* (the custom role staying read-only) is guarded; the load-bearing setting that makes it correct is not. Cheapest close: `grep -q 'block-project-ssh-keys *= *"TRUE"' infra/compute.tf` |
+| **E6** | `"compute.instances.setServiceAccount"` added to `deploy_vm_operator.permissions` | 2 | ❌ survived | Guard 2 is a **denylist** of enumerated verbs (`ci.yml:76`). `setServiceAccount` is not on it |
+| E6b | same, with `compute.instances.setTags` / `compute.instances.addAccessConfig` / `compute.instances.setIamPolicy` / `compute.disks.createSnapshot` | 2 | ❌ all survived (4/4) | same denylist gap |
+| E6c | same, with `resourcemanager.projects.setIamPolicy` / `iam.serviceAccounts.actAs` | 2 | ❌ both survived | `ci.yml:75` only captures `"compute\.…"` strings, so any non-`compute` API prefix is never even examined |
+| E1 | new `google_project_iam_binding "oops" { role = "roles/editor" }` in `infra/wif.tf` | 1 | ❌ survived | Guard 1 greps only `google_project_iam_member`; `_binding` and `_policy` grant the same thing |
+| E2 | `role = local.deploy_role` with `deploy_role = "roles/editor"` in `locals` | 1 | ❌ survived | The `"roles/` literal check (`ci.yml:62-63`) reads the binding block only; one level of indirection defeats it |
+| E3 | `infra/extra.tf` firewall, `ports = ["20-30"]` (covers 22) from `0.0.0.0/0` | 3 | ❌ survived | `awk` matches the literal `"22"` (`ci.yml:89`), not port ranges |
+| E4 | `firewall.tf` `source_ranges = var.wide_open`, new var defaulting to `["0.0.0.0/0"]` | 3, 4 | ❌ survived | The default check is hardcoded to the `operator_ssh_cidrs` block (`ci.yml:103`) |
+
+**Sensor depth**: lightweight-plus (**17 mutations**: 6 guard-targeted, 11
+probing edges). **Result**: 6/6 targeted killed; of the 11 survivors, **E5 and
+E6 are cheap to close and worth ranking**; E1/E2/E3/E4 are the intrinsic ceiling
+of grep/awk-based IaC guards (indirection, aliasing, port ranges) — closing them
+properly means a policy engine (Conftest/OPA, `tfsec`, `checkov`), which is out
+of scope for a course project and is recorded as a known limit, not a defect.
+
+### Gate results
+
+| Gate | Result |
+| --- | --- |
+| `terraform fmt -check -recursive infra` | exit 0 |
+| `terraform -chdir=infra validate` | Success! The configuration is valid. — exit 0 |
+| `terraform -chdir=infra/bootstrap validate` | Success! The configuration is valid. — exit 0 |
+| `.github/workflows/ci.yml` parses (`yaml.safe_load`) | ok — jobs `test`, `iac-guardrails` |
+| `.github/workflows/deploy.yml` parses (`yaml.safe_load`) | ok — job `deploy` |
+| `validate_spec.py nextjs-secure-app` | exit 0 — 0 errors / 0 warnings |
+| `validate_tasks.py nextjs-secure-app` | exit 0 — 0 errors, 16 pre-existing `Tests: none` warnings (infra/CI tasks, unchanged) |
+| `validate_state.py nextjs-secure-app` | **exit 0** — 0 errors |
+| `cd web && npm test` | 15 files, **149 passed**, 0 failed, 0 skipped (unchanged; `web/` untouched by `80e69a1..HEAD`) |
+| `git status --porcelain` | empty at start, between all 17 mutations, and after both scratch worktrees were removed |
+| `git ls-files` secret sweep | 112 tracked files; no `.pem`/`.key`/`.p12`/`.pfx`/`.jks`/`.crt`, no `id_rsa`, no `.env`, no tracked `terraform.tfvars` or `infra/backend.hcl`. The three name-matching paths are `infra/backend.hcl.example` (placeholder `<state_bucket_name …>`), `web/lib/validation/credentials.ts`, `web/lib/validation/credentials.test.ts` — source, no secrets. Root `terraform.tfvars.example` holds only `my-gcp-project-id`-style placeholders |
+
+### Code quality (`80e69a1..HEAD`)
+
+| Principle | Status |
+| --- | --- |
+| Minimum code — one metadata line, three grep/awk assertions, one `awk` glob widened | ✅ |
+| Surgical changes — only `infra/compute.tf`, `.github/workflows/ci.yml`, `infra/wif.tf` comment, `.specs/STATE.md` | ✅ |
+| No scope creep — no `web/` change, no new resource, no new variable | ✅ |
+| Matches existing patterns — guards follow the existing credential-free `set -euo pipefail` + `::error::` style | ✅ |
+| Stale claim corrected — `infra/wif.tf:78-82` no longer asserts instance-metadata publication without reason; it now cites `block-project-ssh-keys=TRUE` | ✅ |
+| Docs/decision log updated in the same round — `.specs/STATE.md` "Amendment 2 fix round 2" + refreshed operator live items | ✅ |
+
+### Overall verdict — whole feature, both amendments
+
+**PASS ✅ — feature and both amendments complete.**
+
+- **Base feature** (`cc46312..63ef549`): PASS — 149 tests, all 7 first-round gaps resolved, mutants killed.
+- **Amendment 1** (permission/IAP hardening): PASS — R2/R3 later closed by Amendment 2.
+- **Amendment 2** (`c36095f..77d0e72`): PASS — G1..G5 raised.
+- **Amendment 2 fix round 1** (`77d0e72..80e69a1`): G2-G5 closed, G1 closed on shape; raised G6 + evasions S6/S7/S8/S10.
+- **Amendment 2 fix round 2** (`80e69a1..HEAD`): **G6 closed** with a
+  doc + gcloud-source citation; **S6/S7/S8/S10 all killed** by CI. No P0 remains.
+
+Every local gate is green and the real working tree was never mutated. The only
+item still unprovable from here is the same one as before — that the keyless IAP
+deploy actually connects on a live project — and it is now backed by the shipped
+gcloud dispatch logic rather than an inference. It stays an operator live step in
+`.specs/STATE.md`.
+
+### Ranked residual gaps (all Minor — none blocking)
+
+1. **E5 — Minor, enforcement (new, highest value).** Deleting
+   `block-project-ssh-keys = "TRUE"` (`infra/compute.tf:54`) passes all four
+   guards, `terraform fmt`, and `validate` — reverting the G6 fix is invisible to
+   CI. Add `grep -q 'block-project-ssh-keys *= *"TRUE"' infra/compute.tf` as a
+   fifth guard step.
+2. **E6 — Minor, enforcement (new).** `ci.yml:75-76` is a **denylist** of
+   mutating verbs restricted to `"compute.*"` strings; 6 of 7 probes survived
+   (`compute.instances.setServiceAccount`, `setTags`, `addAccessConfig`,
+   `setIamPolicy`, `compute.disks.createSnapshot`,
+   `resourcemanager.projects.setIamPolicy`, `iam.serviceAccounts.actAs`). Switch
+   to the **allowlist** the last round actually recommended: every entry in
+   `deploy_vm_operator.permissions` must match `\.(get|list)$`.
+3. **E1 — Minor, enforcement.** Guard 1 greps only `google_project_iam_member`;
+   a `google_project_iam_binding`/`_policy` with `roles/editor` passes. Widen to
+   `google_project_iam_(member|binding|policy)`.
+4. **E2/E3/E4 — Minor, known limit (review-only).** Role literals behind a
+   `local`, firewall port *ranges* covering 22, and a `0.0.0.0/0` default in a
+   differently-named variable all evade grep/awk by construction. Closing these
+   requires a policy engine (Conftest/OPA, tfsec, checkov) rather than more
+   greps; accepted as out of scope and recorded here so it is a decision, not an
+   oversight.
+5. **Minor, tightening.** `compute.globalOperations.get` (`infra/wif.tf:144`) is
+   now dead on the taken SSH path (the metadata write became zonal). Read-only
+   and doc-sanctioned, so keeping it is fine; drop it if the role is ever
+   re-minimised.
+6. **Minor, docs.** `docs/operations.md` does not mention that the VM now
+   ignores project-wide SSH keys — an operator who put their key in *project*
+   metadata will be locked out of direct SSH. `.specs/STATE.md` notes it in the
+   rebuild item; the operator-facing doc should too.
+7. **Carried from Amendment 1 — Minor.** `infra/scripts/startup.sh.tpl:244-257`
+   still duplicates `infra/scripts/ecosystem.config.js` with only a comment
+   enforcing parity. Add a `diff`-based gate.

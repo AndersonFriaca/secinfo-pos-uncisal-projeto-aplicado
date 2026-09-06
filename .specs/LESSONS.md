@@ -122,6 +122,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: S7/S8/S10 - .github/workflows/ci.yml:64-74 (ci)
 - last seen: 2026-09-06T17:26:40Z
 
+### L-019 - Enforce a least-privilege permission list with an allowlist of permitted suffixes (e.g. every entry matches \.(get|list)$), never a denylist of mutating verbs - an enumerated denylist admits every write verb it forgot and every API prefix it does not match.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `ci,iac,iam` · harmful: 0
+- features: nextjs-secure-app
+- evidence: .github/workflows/ci.yml:75-76 (mutants E6/E6b/E6c) (ci,iac,iam)
+- last seen: 2026-09-06T17:38:08Z
+
+### L-020 - When a security fix's correctness rests on one config value elsewhere (an instance metadata flag that redirects which permission a CLI needs), guard that value itself - guarding only its downstream consequence lets deleting the fix pass every gate silently.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `ci,iac` · harmful: 0
+- features: nextjs-secure-app
+- evidence: infra/compute.tf:54 (mutant E5) (ci,iac)
+- last seen: 2026-09-06T17:38:08Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
