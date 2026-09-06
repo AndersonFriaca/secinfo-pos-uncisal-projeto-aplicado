@@ -29,7 +29,7 @@ authenticates through the Workload Identity pool provisioned in `infra/wif.tf`,
 and reaches the VM over an IAP tunnel where `gcloud` mints an ephemeral,
 IAM-scoped SSH key from the federated deploy service account. The app runs on
 the VM as a dedicated locked `appsvc` user. Every credential comes from GitHub
-Actions secrets: `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_REGION`, `GCP_WIF_PROVIDER`,
+Actions secrets: `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`,
 `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`.
 
 ## OWASP Top 10 mitigations

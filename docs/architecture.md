@@ -6,7 +6,7 @@
 infra/bootstrap/          infra/
 ┌──────────────────┐      ┌──────────────────────────────┐
 │ GCS state bucket  │      │ Custom VPC + subnet          │
-│ Billing budget    │◄─────┤ 3 firewall rules (22/80/443) │
+│ Billing budget    │◄─────┤ firewall: IAP-SSH, 80, 443   │
 │ (own local state, │ state│ e2-micro instance            │
 │  never destroyed) │      │ (backed by the gcs bucket)   │
 └──────────────────┘      └──────────────────────────────┘
@@ -43,7 +43,8 @@ Firewall (22 / 80 / 443 only, custom VPC — never GCP's `default` network)
    ▼
 e2-micro instance (Ubuntu 24.04, Shielded VM)
    │
-   ├─ :22  → sshd (key-only, Fail2ban jail)
+   ├─ :22  → sshd — IAP range only by default (key-only, Fail2ban jail);
+   │          direct CIDR access is opt-in via var.operator_ssh_cidrs
    ├─ :80  → Nginx → 301 redirect to :443
    └─ :443 → Nginx (Let's Encrypt IP certificate)
                └─ proxy_pass → localhost:3000 (PM2-managed Next.js app)
@@ -60,7 +61,7 @@ separate feature (see `prd.md`'s Eixo 3).
 | `infra/bootstrap/storage.tf` | `google_storage_bucket` | Terraform remote state for `infra/` |
 | `infra/bootstrap/billing.tf`, `billing-data.tf`, `billing-variables.tf` | `google_billing_budget`, `google_project_service` | Spend alert (pattern from [eatonc/actual-gcp](https://github.com/eatonc/actual-gcp)) |
 | `infra/network.tf` | `google_compute_network`, `google_compute_subnetwork` | Dedicated custom VPC — no inherited permissive rules |
-| `infra/firewall.tf` | `google_compute_firewall` × 3 | Least-privilege ingress: SSH, HTTP, HTTPS only |
+| `infra/firewall.tf` | `google_compute_firewall` | Least-privilege ingress: SSH from the IAP range (always) and from `var.operator_ssh_cidrs` (opt-in), HTTP, HTTPS |
 | `infra/compute.tf` | `google_compute_instance` | The VM itself — every setting pinned for free-tier + Shielded VM |
 | `infra/scripts/startup.sh.tpl` | (instance metadata) | Idempotent boot-time provisioning — see the stage list below |
 | `infra/scripts/ecosystem.config.js` | (copied to `/opt/app`) | PM2 process definition for the future Next.js app |
