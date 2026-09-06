@@ -4,8 +4,9 @@ set -euo pipefail
 # GCP re-runs metadata.startup-script on every boot, so every stage below
 # guards itself (marker comments, command -v checks, file-exists checks)
 # so re-runs are safe no-ops where nothing changed. Rendered via
-# templatefile() in infra/compute.tf; ${ssh_username} is the only
-# variable interpolated in from Terraform.
+# templatefile() in infra/compute.tf with no template variables — the app
+# runtime user is the hardcoded constant `appsvc`, and the operator's SSH key
+# is injected separately through instance metadata (compute.tf `ssh-keys`).
 
 # --- Stage 1: base packages (apt install is naturally idempotent) ---
 # Node.js is NOT installed from apt here: Ubuntu 24.04 ships Node 18.19, but
@@ -208,14 +209,22 @@ else
   logger -t startup-script "no certbot renewal timer found on this system; renewal may need manual configuration"
 fi
 
-# --- Stage 9: PM2 install + systemd startup registration ---
+# --- Stage 9: dedicated app service user + PM2 install + systemd registration ---
+# The app runs as `appsvc`, a locked system user decoupled from any human
+# operator: CI connects over IAP as its own ephemeral login user (in
+# google-sudoers) and hands ownership of /opt/app to appsvc, which is what PM2
+# runs as. Created idempotently.
+id appsvc >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin appsvc
+
 if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g pm2
 fi
 
-PM2_UNIT="/etc/systemd/system/pm2-${ssh_username}.service"
+PM2_UNIT="/etc/systemd/system/pm2-appsvc.service"
 if [ ! -f "$PM2_UNIT" ]; then
-  PM2_STARTUP_CMD="$(su - "${ssh_username}" -c "pm2 startup systemd -u ${ssh_username} --hp /home/${ssh_username}" | grep '^sudo ' || true)"
+  # appsvc has a nologin shell, so `su -` fails — use runuser to grab the
+  # `sudo ...` line `pm2 startup` prints and eval it.
+  PM2_STARTUP_CMD="$(runuser -u appsvc -- pm2 startup systemd -u appsvc --hp /home/appsvc | grep '^sudo ' || true)"
   if [ -n "$PM2_STARTUP_CMD" ]; then
     eval "$PM2_STARTUP_CMD"
   fi
@@ -227,8 +236,9 @@ fi
 # string — infra/scripts/ecosystem.config.js never gets uploaded to the
 # VM's filesystem on its own. Content must stay identical to that file.
 mkdir -p /opt/app
-# Owned by the deploy user so the CI/CD pipeline writes releases without sudo.
-chown "${ssh_username}:${ssh_username}" /opt/app
+# Owned by appsvc, which PM2 runs as. The IAP deploy connects as an ephemeral
+# sudo-capable user and writes releases with `sudo install -o appsvc`.
+chown -R appsvc:appsvc /opt/app
 if [ ! -f /opt/app/ecosystem.config.js ]; then
   cat > /opt/app/ecosystem.config.js <<'EOF'
 module.exports = {

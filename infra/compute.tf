@@ -44,10 +44,8 @@ resource "google_compute_instance" "vm" {
   }
 
   metadata = {
-    ssh-keys = "${var.ssh_username}:${file(var.ssh_public_key_path)}"
-    startup-script = templatefile("${path.module}/scripts/startup.sh.tpl", {
-      ssh_username = var.ssh_username
-    })
+    ssh-keys       = "${var.ssh_username}:${file(var.ssh_public_key_path)}"
+    startup-script = templatefile("${path.module}/scripts/startup.sh.tpl", {})
   }
 
   # No Ops Agent install, no google_compute_resource_policy snapshot
