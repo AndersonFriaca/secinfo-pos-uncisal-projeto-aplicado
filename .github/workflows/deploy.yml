@@ -1,0 +1,167 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: build, authenticate, ship
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Unit tests
+        working-directory: web
+        run: npm test
+
+      - name: Build standalone bundle
+        working-directory: web
+        run: npm run build
+
+      - name: Assemble release archive
+        working-directory: web
+        run: |
+          set -euo pipefail
+          rm -rf bundle && mkdir -p bundle/.next/static
+          cp -r .next/standalone/. bundle/
+          cp -r .next/static/. bundle/.next/static/
+          [ -d public ] && cp -r public bundle/public || true
+          tar -czf "$GITHUB_WORKSPACE/release.tgz" -C bundle .
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA_EMAIL }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve the VM external IP (start it if TERMINATED)
+        id: vm
+        env:
+          ZONE: ${{ secrets.GCP_ZONE }}
+          REGION: ${{ secrets.GCP_REGION }}
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          INSTANCE=app-vm
+          ADDRESS_NAME=app-vm-ip
+          STATUS="$(gcloud compute instances describe "$INSTANCE" \
+            --zone="$ZONE" --project="$PROJECT" --format='value(status)')"
+          if [ "$STATUS" = "TERMINATED" ]; then
+            if ! gcloud compute addresses describe "$ADDRESS_NAME" \
+                --region="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
+              gcloud compute addresses create "$ADDRESS_NAME" \
+                --region="$REGION" --project="$PROJECT" --network-tier=STANDARD
+            fi
+            RESERVED_IP="$(gcloud compute addresses describe "$ADDRESS_NAME" \
+              --region="$REGION" --project="$PROJECT" --format='value(address)')"
+            gcloud compute instances delete-access-config "$INSTANCE" \
+              --zone="$ZONE" --project="$PROJECT" \
+              --access-config-name="External NAT" || true
+            gcloud compute instances add-access-config "$INSTANCE" \
+              --zone="$ZONE" --project="$PROJECT" \
+              --access-config-name="External NAT" \
+              --address="$RESERVED_IP" --network-tier=STANDARD
+            gcloud compute instances start "$INSTANCE" \
+              --zone="$ZONE" --project="$PROJECT"
+          fi
+          IP="$(gcloud compute instances describe "$INSTANCE" \
+            --zone="$ZONE" --project="$PROJECT" \
+            --format='value(networkInterfaces[0].accessConfigs[0].natIP)')"
+          echo "ip=$IP" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          IP: ${{ steps.vm.outputs.ip }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          for i in $(seq 1 12); do
+            ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts 2>/dev/null && break
+            sleep 5
+          done
+
+      - name: Ship the bundle and flip the current symlink
+        env:
+          IP: ${{ steps.vm.outputs.ip }}
+          SSH_USER: ${{ secrets.VM_SSH_USER }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          TARGET="$SSH_USER@$IP"
+          SSH="ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes $TARGET"
+          scp -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes \
+            "$GITHUB_WORKSPACE/release.tgz" "$TARGET:/tmp/release-$SHA.tgz"
+          $SSH "set -euo pipefail
+            install -d /opt/app/releases/$SHA
+            tar -xzf /tmp/release-$SHA.tgz -C /opt/app/releases/$SHA
+            rm -f /tmp/release-$SHA.tgz
+            ln -sfn /opt/app/releases/$SHA /opt/app/current"
+
+      - name: Write /opt/app/.env.production from secrets
+        env:
+          IP: ${{ steps.vm.outputs.ip }}
+          SSH_USER: ${{ secrets.VM_SSH_USER }}
+          IDENTITY_PLATFORM_API_KEY: ${{ secrets.IDENTITY_PLATFORM_API_KEY }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          {
+            echo "NODE_ENV=production"
+            echo "PORT=3000"
+            echo "IDENTITY_PLATFORM_API_KEY=$IDENTITY_PLATFORM_API_KEY"
+            echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT"
+          } | ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$IP" \
+            "umask 077 && cat > /opt/app/.env.production && chmod 600 /opt/app/.env.production"
+
+      - name: Reload PM2
+        env:
+          IP: ${{ steps.vm.outputs.ip }}
+          SSH_USER: ${{ secrets.VM_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes "$SSH_USER@$IP" \
+            "cd /opt/app && (pm2 reload ecosystem.config.js --update-env || pm2 start ecosystem.config.js) && pm2 save"
+
+      - name: Health poll (fail after 2 minutes without HTTP 200)
+        env:
+          IP: ${{ steps.vm.outputs.ip }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 120))
+          until [ "$(curl -sk -o /dev/null -w '%{http_code}' "https://$IP/")" = "200" ]; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "no HTTP 200 from https://$IP/ within 2 minutes" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "deployment healthy at https://$IP/"

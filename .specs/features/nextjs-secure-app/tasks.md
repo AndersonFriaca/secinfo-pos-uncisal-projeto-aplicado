@@ -848,18 +848,19 @@ T27 → T28
 - Skill: NONE
 
 **Done when**:
-- [ ] Triggers on `push` to `main`; runs the tests before building
-- [ ] Authenticates with `google-github-actions/auth` using the WIF provider and service account from secrets — the file contains **no** service-account JSON key and no `credentials_json`
-- [ ] Resolves the VM's external IP with `gcloud compute instances describe`; if the instance is `TERMINATED`, reserves an IP, attaches it, and starts the instance before deploying
-- [ ] Copies the `standalone` bundle into `/opt/app/releases/<sha>` and flips the `current` symlink atomically
-- [ ] Writes `/opt/app/.env.production` from GitHub secrets with `chmod 600`
-- [ ] Reloads PM2, then polls `https://<ip>/` until HTTP 200, failing the job after 2 minutes
-- [ ] Every credential comes from `secrets.*`; `grep` finds no literal key, token, or project ID in the file
-- [ ] Workflow gate passes
+- [x] Triggers on `push` to `main`; runs the tests before building
+- [x] Authenticates with `google-github-actions/auth` using the WIF provider and service account from secrets — the file contains **no** service-account JSON key and no `credentials_json`
+- [x] Resolves the VM's external IP with `gcloud compute instances describe`; if the instance is `TERMINATED`, reserves an IP, attaches it, and starts the instance before deploying
+- [x] Copies the `standalone` bundle into `/opt/app/releases/<sha>` and flips the `current` symlink atomically
+- [x] Writes `/opt/app/.env.production` from GitHub secrets with `chmod 600`
+- [x] Reloads PM2, then polls `https://<ip>/` until HTTP 200, failing the job after 2 minutes
+- [x] Every credential comes from `secrets.*`; `grep` finds no literal key, token, or project ID in the file
+- [x] Workflow gate passes
 
 **Tests**: none (CI config; live execution is deferred to the operator's first merge)
 **Gate**: Workflow
 **Commit**: `ci: add deploy workflow with workload identity federation`
+**Status**: [x] Complete
 
 ---
 
