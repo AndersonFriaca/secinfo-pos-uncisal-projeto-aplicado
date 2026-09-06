@@ -84,15 +84,16 @@ T1 → T2 → T3
 - Skill: NONE
 
 **Done when**:
-- [ ] `web/` contains a Next.js 16 App Router project in TypeScript (`package.json`, `tsconfig.json`, `app/layout.tsx`, `app/page.tsx` placeholder)
-- [ ] `next.config.ts` sets `output: "standalone"` and `poweredByHeader: false`
-- [ ] `next.config.ts` does NOT set `output: "export"` (SSR is required)
-- [ ] `web/.gitignore` (or the root one) excludes `node_modules/`, `.next/`, and `.env*`
-- [ ] `cd web && npm run build` succeeds
+- [x] `web/` contains a Next.js 16 App Router project in TypeScript (`package.json`, `tsconfig.json`, `app/layout.tsx`, `app/page.tsx` placeholder)
+- [x] `next.config.ts` sets `output: "standalone"` and `poweredByHeader: false`
+- [x] `next.config.ts` does NOT set `output: "export"` (SSR is required)
+- [x] `web/.gitignore` (or the root one) excludes `node_modules/`, `.next/`, and `.env*`
+- [x] `cd web && npm run build` succeeds
 
 **Tests**: none (scaffold; covered by the build gate)
 **Gate**: Build
 **Commit**: `feat(web): scaffold next.js app with standalone output`
+**Status**: [x] Complete
 
 ---
 
