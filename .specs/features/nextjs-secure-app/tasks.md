@@ -337,16 +337,17 @@ T9 → T10
 - Skill: NONE
 
 **Done when**:
-- [ ] `POST|PUT|PATCH|DELETE` require `Origin` (falling back to `Referer`) to equal the app's own origin, else HTTP 403
-- [ ] The same methods require the submitted CSRF token to match the cookie via the constant-time comparison, else HTTP 403
-- [ ] Any `/api/*` request with a foreign `Origin` is rejected 403 and **no** `Access-Control-Allow-Origin` header is emitted on any path
-- [ ] `GET`/`HEAD` are not subject to the CSRF check
-- [ ] Unit tests cover: same-origin + valid token → passes; foreign origin → 403; missing/absent token → 403; mismatched token → 403; missing `Origin` but matching `Referer` → passes; `GET` with no token → passes
-- [ ] Quick gate passes
+- [x] `POST|PUT|PATCH|DELETE` require `Origin` (falling back to `Referer`) to equal the app's own origin, else HTTP 403
+- [x] The same methods require the submitted CSRF token to match the cookie via the constant-time comparison, else HTTP 403
+- [x] Any `/api/*` request with a foreign `Origin` is rejected 403 and **no** `Access-Control-Allow-Origin` header is emitted on any path
+- [x] `GET`/`HEAD` are not subject to the CSRF check
+- [x] Unit tests cover: same-origin + valid token → passes; foreign origin → 403; missing/absent token → 403; mismatched token → 403; missing `Origin` but matching `Referer` → passes; `GET` with no token → passes
+- [x] Full gate passes
 
 **Tests**: unit
 **Gate**: Full
 **Commit**: `feat(web): enforce same-origin and csrf in edge proxy`
+**Status**: [x] Complete
 
 ---
 
