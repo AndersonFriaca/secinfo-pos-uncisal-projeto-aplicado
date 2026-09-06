@@ -83,7 +83,10 @@ function applyHeaders(
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const nonce = generateNonce();
   const isDev = process.env.NODE_ENV === "development";
-  const securityHeaders = buildSecurityHeaders({ nonce, isDev });
+  // `/dashboard` carries authenticated content, so it gets `Cache-Control:
+  // no-store` too (SEC-17); `/api/auth/*` responses set it themselves.
+  const sensitive = request.nextUrl.pathname.startsWith("/dashboard");
+  const securityHeaders = buildSecurityHeaders({ nonce, isDev, sensitive });
   const csp = securityHeaders["Content-Security-Policy"];
 
   const method = request.method.toUpperCase();

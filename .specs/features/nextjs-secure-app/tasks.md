@@ -649,14 +649,17 @@ T17 → T18 → T19 → T20 → T21
 - Skill: NONE
 
 **Done when**:
-- [ ] Calls `getAuthenticatedUser` on every request — no cached client-side flag — and redirects to `/login` (303) when it returns null
-- [ ] Renders the authenticated user's email and a logout button posting to `/api/auth/logout` with the CSRF token
-- [ ] The response carries `Cache-Control: no-store`
-- [ ] `npm run build` succeeds
+- [x] Calls `getAuthenticatedUser` on every request — no cached client-side flag — and redirects to `/login` (303) when it returns null
+- [x] Renders the authenticated user's email and a logout button posting to `/api/auth/logout` with the CSRF token
+- [x] The response carries `Cache-Control: no-store`
+- [x] `npm run build` succeeds
 
 **Tests**: none (shell; the guard's five branches are unit-tested in T12)
 **Gate**: Build
 **Commit**: `feat(web): add authenticated dashboard with logout`
+**Status**: [x] Complete
+
+**Implementation notes**: (1) `Cache-Control: no-store` for `/dashboard` is applied in `web/proxy.ts` (`sensitive: true` when the path starts with `/dashboard`) — a page render cannot set a response header. (2) `redirect("/login")` issues 307, not the spec's 303; both are a GET navigation and the guard's branches are unit-tested in T12 (marked `SPEC_DEVIATION` in the file).
 
 ---
 
