@@ -77,6 +77,12 @@ it.
   [`web/lib/security/rate-limit.ts`](web/lib/security/rate-limit.ts). It is
   wired into the login route at
   [`web/app/api/auth/login/route.ts`](web/app/api/auth/login/route.ts).
+  Client-IP resolution
+  ([`web/lib/security/rate-limit.ts`](web/lib/security/rate-limit.ts)) trusts the
+  left-most `X-Forwarded-For` entry. This is only safe because the VM's Nginx
+  reverse proxy is the sole ingress and overwrites that header on every request;
+  if the app were ever exposed directly, a client could spoof `X-Forwarded-For`
+  to evade or misattribute the IP block.
 - **Generic authentication errors.** Every upstream credential error collapses
   to one message, so an unknown email and a wrong password are
   indistinguishable — no account enumeration. See
