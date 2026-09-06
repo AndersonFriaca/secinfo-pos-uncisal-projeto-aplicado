@@ -123,6 +123,24 @@ CI. Federating VM access through the same WIF identity used for the GCP API
 removes it entirely. Decoupling the runtime user (`appsvc`) from any human
 operator lets the CI connect as its own per-run identity.
 
+**Amendment 2 refinement (hardening):** the deploy SA now holds **zero
+project-level role**. `roles/compute.instanceAdmin.v1` and
+`roles/iap.tunnelResourceAccessor` are bound to the single app VM instance
+(`google_compute_instance_iam_member` / `google_iap_tunnel_instance_iam_member`),
+and `roles/iam.serviceAccountUser` to the VM's attached (default compute)
+service account (`google_service_account_iam_member` on
+`data.google_compute_default_service_account`). This was unblocked by dropping
+the CI static-IP reservation: `deploy.yml` on a `TERMINATED` VM now just runs
+`gcloud compute instances start`, polls until `RUNNING`, and reads the new
+ephemeral IP — no region-scoped `addresses.*` calls, so `GCP_REGION` is no
+longer a secret. Direct public SSH is now **opt-in**: `allow-ssh` is gated by
+`count` on `var.operator_ssh_cidrs` (default `[]`), so by default the only
+`:22` ingress is the IAP range. Operator SSH goes through
+`gcloud compute ssh --tunnel-through-iap` (principal needs
+`roles/iap.tunnelResourceAccessor`) unless the operator sets
+`operator_ssh_cidrs`. If an explicit service account is ever attached to the
+VM, the `roles/iam.serviceAccountUser` binding target must move to it.
+
 ## Handoff
 
 **Feature**: `nextjs-secure-app` — **COMPLETE**. Execute done (T1-T30, 5 sequential sub-agent batches), independent Verifier **PASS** on re-verification 1/3, minor residual gaps R1/R3 cleaned up.
@@ -132,12 +150,15 @@ operator lets the CI connect as its own per-run identity.
 **Feature commit range**: `cc46312..HEAD` (~41 commits on `main`).
 **In progress**: nothing.
 **Amendment (AD-007, keyless IAP deploy)**: `deploy.yml` rewritten to reach the VM only via `gcloud compute scp/ssh --tunnel-through-iap` — `Configure SSH` step and the `VM_SSH_PRIVATE_KEY`/`VM_SSH_USER` secrets removed. `infra/`: `iap.googleapis.com` enabled, `allow-iap-ssh` firewall rule, `roles/iap.tunnelResourceAccessor` on the deploy SA. `startup.sh.tpl`: dedicated locked `appsvc` user owns `/opt/app` and runs PM2 (`pm2-appsvc` unit); template no longer interpolates any variable. Gates: terraform fmt/validate clean, `bash -n` + `node --check` clean, both workflows parse as YAML, `web/` suite unchanged.
+**Amendment 2 (hardening, residuals R2/R3 from `validation.md`)**: `deploy.yml` drops the static-IP reserve/attach/detach block — on a `TERMINATED` VM it now starts the instance, polls until `RUNNING`, and reads the ephemeral `natIP` (`GCP_REGION` no longer consumed). `infra/wif.tf`: the deploy SA's three grants moved from project scope to instance scope (`google_compute_instance_iam_member`, `google_iap_tunnel_instance_iam_member`) and the VM's default compute SA (`google_service_account_iam_member`) — zero project-level role. `infra/firewall.tf`: `allow-ssh` is now `count`-gated on the new `var.operator_ssh_cidrs` (default `[]`), so public `:22` is opt-in; IAP-range `:22` is the only default SSH ingress. Gates: `terraform fmt`/`validate` clean on `infra/` + `infra/bootstrap/`, both workflows parse as YAML, `web/` suite untouched (149 pass). Commits `c4ef818`, `719b205`, `449b77c`, + this doc commit.
+
 **Next step**: operator live steps below. Also: `.specs/LESSONS.md` + `lessons.json` hold 8 candidate lessons (L-001..L-008) from the Verifier — review/confirm when convenient.
 
 ### Operator live steps (deferred — need an authenticated GCP account + a running VM)
 
-1. **GitHub repo + secrets.** Push to the GitHub repo and configure Actions secrets: `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`. No SSH key or SSH-user secret — VM access is keyless over an IAP tunnel (AD-007). The WIF provider name and deploy-SA email come from `terraform output` after step 2.
-2. **`terraform apply` the new resources.** In `infra/`: applies `google_project_service` (identitytoolkit, firestore, iamcredentials, **iap**), `google_identity_platform_config`, `google_firestore_database` (Native, `us-east1`), the Workload Identity pool/provider, the deploy service account (now also `roles/iap.tunnelResourceAccessor`), and the `allow-iap-ssh` firewall rule. Verify the `principalSet://` member resolved to this repo.
+1. **GitHub repo + secrets.** Push to the GitHub repo and configure Actions secrets: `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`. **`GCP_REGION` is no longer used** (Amendment 2 dropped the CI static-IP reservation). No SSH key or SSH-user secret — VM access is keyless over an IAP tunnel (AD-007). The WIF provider name and deploy-SA email come from `terraform output` after step 2.
+2. **`terraform apply` the new resources.** In `infra/`: applies `google_project_service` (identitytoolkit, firestore, iamcredentials, **iap**), `google_identity_platform_config`, `google_firestore_database` (Native, `us-east1`), the Workload Identity pool/provider, and the `allow-iap-ssh` firewall rule. The deploy SA's `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor` are **instance-scoped** (`google_compute_instance_iam_member` / `google_iap_tunnel_instance_iam_member` on `app-vm`) and `roles/iam.serviceAccountUser` is scoped to the VM's default compute SA — the deploy SA gets no project-level role. Verify the `principalSet://` member resolved to this repo, and that `gcloud projects get-iam-policy` shows no deploy-SA binding.
+   - **Direct operator SSH is now opt-in.** `allow-ssh` (public `:22`) only exists when `operator_ssh_cidrs` is set in `terraform.tfvars`. Otherwise reach the VM with `gcloud compute ssh <user>@app-vm --tunnel-through-iap`; the calling principal needs `roles/iap.tunnelResourceAccessor` (or Owner + a self-grant).
 3. **Rebuild the VM for Node 24 + `appsvc`.** The updated `startup.sh.tpl` only takes effect on a fresh boot / instance recreation. It now also provisions the locked `appsvc` user that owns `/opt/app` and runs PM2. After it runs, confirm `node --version` reports `v24.x`, `pm2 list` works, `systemctl status pm2-appsvc` is active, `test -w /opt/app` as `appsvc`, and `curl -sI https://<ip>/ | grep -i '^server:'` shows no version.
 4. **Merge to `main`** to trigger `deploy.yml`: WIF auth (no key), dynamic IP resolution, `gcloud compute scp/ssh --tunnel-through-iap` (ephemeral SSH key, no stored key), bundle to `/opt/app/releases/<sha>` via `sudo install -o appsvc`, `current` symlink flip, `.env.production` copied chmod 600 owned by `appsvc`, PM2 reload as `appsvc`, health poll to HTTP 200.
 5. **Run every "Independent Test" in `spec.md`** against the live VM: landing page 200 + no `NEXT_PUBLIC_`/Firebase config in HTML; signup weak/strong password; login byte-identical failures + `Set-Cookie` attributes + no client-bundle Identity Platform reference; dashboard 303 without cookie / 200 with / 303 after logout-replay; six failed logins → 429 `Retry-After: 60` with the 6th never reaching Identity Platform; `curl -sI` full OWASP header set + absence checks + foreign-`Origin` 403; PR shows a red check on a broken assertion; merge produces a green deploy with a dynamic IP and a 200 health poll; `terraform destroy` then `apply` round-trips.

@@ -732,7 +732,7 @@ T22 → T23 → T24
 **Done when**:
 - [x] `google_iam_workload_identity_pool` + `google_iam_workload_identity_pool_provider` with `oidc.issuer_uri = "https://token.actions.githubusercontent.com"` and `attribute_mapping` covering `google.subject`, `attribute.repository`, and `attribute.repository_owner`
 - [x] An `attribute_condition` restricts the provider to this repository — without it any GitHub repo could assume the service account
-- [x] A deploy service account is bound with `roles/iam.workloadIdentityUser` via a `principalSet://` member scoped to this repository; project roles are exactly `roles/compute.instanceAdmin.v1`, `roles/iam.serviceAccountUser`, and `roles/iap.tunnelResourceAccessor` (keyless IAP SSH tunnel to the VM) — never `roles/owner` or `roles/editor`
+- [x] A deploy service account is bound with `roles/iam.workloadIdentityUser` via a `principalSet://` member scoped to this repository; `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor` are bound to the app VM instance only, and `roles/iam.serviceAccountUser` to the VM's attached service account only — **no project-level role**, never `roles/owner` or `roles/editor` (tightened in Amendment 2)
 - [x] `iap.googleapis.com` is enabled (in `infra/app.tf`) and an `allow-iap-ssh` firewall rule opens `tcp:22` from `35.235.240.0/20` so the keyless deploy can reach sshd
 - [x] **Verify the exact `principalSet://` member format and whether `attribute_condition` is provider-required against the current Terraform provider documentation before applying** — the design flags this as easy to get subtly wrong, and a wrong member fails silently
 - [x] Outputs expose the WIF provider resource name and the deploy service-account email for copying into GitHub secrets
@@ -841,7 +841,7 @@ T27 → T28
 **What**: Build on merge, authenticate keylessly, resolve or start the VM, ship the bundle, reload PM2, verify.
 **Where**: `.github/workflows/deploy.yml`
 **Depends on**: T27, T24, T26
-**Reuses**: The reserve/attach/start sequence from `ops/vm-start.sh`; the WIF outputs from T24
+**Reuses**: The WIF outputs from T24 (Amendment 2: the static-IP reserve/attach dance was dropped — CI just starts the VM and reads the ephemeral IP)
 **Requirement**: CICD-01, CICD-02, CICD-03, CICD-04, CICD-05, CICD-06, CICD-07, CICD-08
 
 **Tools**:
@@ -852,11 +852,11 @@ T27 → T28
 - [x] Triggers on `push` to `main`; runs the tests before building
 - [x] Authenticates with `google-github-actions/auth` using the WIF provider and service account from secrets — the file contains **no** service-account JSON key and no `credentials_json`
 - [x] Reaches the VM entirely over an IAP tunnel (`gcloud compute scp`/`ssh --tunnel-through-iap`) with **no stored SSH key and no `VM_SSH_*` secret**; there is no `Configure SSH` step
-- [x] Resolves the VM's external IP with `gcloud compute instances describe`; if the instance is `TERMINATED`, reserves an IP, attaches it, and starts the instance before deploying
+- [x] Resolves the VM's external IP with `gcloud compute instances describe`; if the instance is `TERMINATED`, starts it, polls until `RUNNING`, and resolves the new ephemeral IP before deploying — no static-IP reservation (Amendment 2)
 - [x] Copies the `standalone` bundle into `/opt/app/releases/<sha>` (`sudo install -o appsvc`) and flips the `current` symlink atomically; the first remote call retries while sshd/key propagation catches up
 - [x] Copies `/opt/app/.env.production` from GitHub secrets over the tunnel with `install -m 600 -o appsvc` — the secret value never lands on a remote command line
 - [x] Reloads PM2 as `appsvc`, then polls `https://<ip>/` until HTTP 200, failing the job after 2 minutes
-- [x] Remaining secrets are exactly `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`; `grep` finds no literal key, token, or project ID in the file
+- [x] Remaining secrets are exactly `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY` (Amendment 2 dropped `GCP_REGION` with the static-IP reservation); `grep` finds no literal key, token, or project ID in the file
 - [x] Workflow gate passes
 
 **Tests**: none (CI config; live execution is deferred to the operator's first merge)
