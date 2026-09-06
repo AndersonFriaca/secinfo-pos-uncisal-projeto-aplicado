@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createSession,
   getAuthenticatedUser,
+  getSessionState,
   revokeSession,
   sessionCookieOptions,
   verifySession,
@@ -123,5 +124,40 @@ describe("getAuthenticatedUser (AUTH-13, AUTH-16)", () => {
       pending: { uid: "u2", email: "u2@example.com", email_verified: false },
     });
     expect(await getAuthenticatedUser("pending", { auth })).toBeNull();
+  });
+});
+
+describe("getSessionState (AUTH-06, AUTH-13, AUTH-16)", () => {
+  it("returns authenticated with the user for a verified session", async () => {
+    const auth = new FakeAuth({
+      ok: { uid: "u1", email: "u1@example.com", email_verified: true },
+    });
+    expect(await getSessionState("ok", { auth })).toEqual({
+      status: "authenticated",
+      user: { uid: "u1", email: "u1@example.com" },
+    });
+  });
+
+  it("distinguishes an authenticated-but-unverified session from no session", async () => {
+    const auth = new FakeAuth({
+      pending: { uid: "u2", email: "u2@example.com", email_verified: false },
+    });
+    expect(await getSessionState("pending", { auth })).toEqual({
+      status: "unverified",
+    });
+  });
+
+  it("returns unauthenticated for a missing cookie", async () => {
+    const auth = new FakeAuth();
+    expect(await getSessionState(null, { auth })).toEqual({
+      status: "unauthenticated",
+    });
+  });
+
+  it("returns unauthenticated for an invalid or revoked cookie", async () => {
+    const auth = new FakeAuth({}, new Set(["revoked"]));
+    expect(await getSessionState("revoked", { auth })).toEqual({
+      status: "unauthenticated",
+    });
   });
 });

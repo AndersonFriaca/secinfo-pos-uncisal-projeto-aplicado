@@ -8,29 +8,35 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getAuthenticatedUser } from "@/lib/auth/session";
+import { getSessionState } from "@/lib/auth/session";
 
 const SESSION_COOKIE = "__session";
 
 /**
- * Protected dashboard (AUTH-13, AUTH-14, AUTH-16, SEC-17).
+ * Protected dashboard (AUTH-06, AUTH-13, AUTH-14, AUTH-16, SEC-17).
  *
- * `getAuthenticatedUser` runs on every request (reading `cookies()` forces
- * dynamic rendering — no cached client flag); it returns null for a missing,
- * expired, revoked, or unverified-email session, and the page redirects to
- * `/login`. `proxy.ts` adds `Cache-Control: no-store` for `/dashboard`.
+ * `getSessionState` runs on every request (reading `cookies()` forces dynamic
+ * rendering — no cached client flag). An authenticated-but-unverified session
+ * is sent to `/verify-email` (AUTH-06); a missing, expired, or revoked session
+ * is sent to `/login`. `proxy.ts` adds `Cache-Control: no-store` for
+ * `/dashboard`.
  */
 export default async function DashboardPage() {
   const csrfToken = (await headers()).get("x-csrf-token") ?? "";
   const sessionCookie = (await cookies()).get(SESSION_COOKIE)?.value ?? null;
-  const user = await getAuthenticatedUser(sessionCookie);
+  const state = await getSessionState(sessionCookie);
 
-  if (!user) {
-    // SPEC_DEVIATION: Next's redirect() issues 307, the spec names 303.
-    // Reason: a page render cannot set the redirect status; both are a GET
-    // navigation to /login and the guard's branches are unit-tested in T12.
+  // SPEC_DEVIATION: Next's redirect() issues 307, the spec names 303.
+  // Reason: a page render cannot set the redirect status; both are a GET
+  // navigation and the guard's branches are unit-tested in session.test.ts.
+  if (state.status === "unverified") {
+    redirect("/verify-email");
+  }
+  if (state.status !== "authenticated") {
     redirect("/login");
   }
+
+  const user = state.user;
 
   return (
     <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-6 px-6 py-16">

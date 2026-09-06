@@ -5,7 +5,7 @@
  * The Admin SDK is resolved lazily and can be injected, so unit tests need no
  * GCP credentials. Node runtime only (AD-005).
  *
- * Requirements: AUTH-08, AUTH-11, AUTH-13, AUTH-14, AUTH-16, AUTH-17.
+ * Requirements: AUTH-06, AUTH-08, AUTH-11, AUTH-13, AUTH-14, AUTH-16, AUTH-17.
  */
 
 /** 12-hour session (spec: `SameSite=Strict`, 12h). */
@@ -115,16 +115,42 @@ export async function revokeSession(
 }
 
 /**
- * The dashboard guard (AUTH-13, AUTH-16). Returns the user only when the cookie
- * verifies AND the email is verified; `null` for a missing cookie, an invalid
- * cookie, a revoked session, or an unverified email.
+ * The three distinguishable outcomes of the dashboard guard. `unverified` is
+ * kept separate from `unauthenticated` so the caller can send an authenticated
+ * but unverified user to `/verify-email` rather than `/login` (AUTH-06).
+ */
+export type SessionState =
+  | { status: "authenticated"; user: AuthUser }
+  | { status: "unverified" }
+  | { status: "unauthenticated" };
+
+/**
+ * The dashboard guard (AUTH-06, AUTH-13, AUTH-16). Distinguishes a verified
+ * session, an authenticated-but-unverified session, and no valid session at all
+ * (missing cookie, invalid cookie, or revoked session).
+ */
+export async function getSessionState(
+  cookieValue: string | null | undefined,
+  opts: SessionCallOptions = {},
+): Promise<SessionState> {
+  const claims = await verifySession(cookieValue, opts);
+  if (!claims) return { status: "unauthenticated" };
+  if (claims.email_verified !== true) return { status: "unverified" };
+  return {
+    status: "authenticated",
+    user: { uid: claims.uid, email: claims.email ?? null },
+  };
+}
+
+/**
+ * Convenience wrapper over `getSessionState` (AUTH-13, AUTH-16). Returns the
+ * user only when the cookie verifies AND the email is verified; `null` for a
+ * missing cookie, an invalid cookie, a revoked session, or an unverified email.
  */
 export async function getAuthenticatedUser(
   cookieValue: string | null | undefined,
   opts: SessionCallOptions = {},
 ): Promise<AuthUser | null> {
-  const claims = await verifySession(cookieValue, opts);
-  if (!claims) return null;
-  if (claims.email_verified !== true) return null;
-  return { uid: claims.uid, email: claims.email ?? null };
+  const state = await getSessionState(cookieValue, opts);
+  return state.status === "authenticated" ? state.user : null;
 }
