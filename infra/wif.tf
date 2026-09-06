@@ -76,7 +76,10 @@ resource "google_service_account_iam_member" "deploy_wif" {
 #
 #   - roles/compute.instanceAdmin.v1 on google_compute_instance.vm only:
 #     start the instance when TERMINATED, read its status/IP, and publish the
-#     ephemeral SSH key that `gcloud compute ssh` mints into instance metadata.
+#     ephemeral SSH key that `gcloud compute ssh` mints. The key lands in this
+#     instance's own metadata (not project-wide) because compute.tf sets
+#     block-project-ssh-keys=TRUE, so instance-scoped compute.instances.setMetadata
+#     is enough — no project-level metadata write is needed.
 #     Bound at the instance resource level, so it grants nothing on any other
 #     instance, disk, image, or snapshot in the project.
 #   - roles/iap.tunnelResourceAccessor on the same instance only: open the IAP
