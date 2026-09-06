@@ -1,6 +1,8 @@
 // PM2 process definition for the Next.js app deploy.
-// Copied verbatim to /opt/app/ecosystem.config.js by the startup script
-// (infra/scripts/startup.sh.tpl, stage 10) — the two copies MUST stay identical.
+// This file is the single source of truth: infra/compute.tf reads it with
+// file() and Terraform injects its content verbatim into the startup script
+// (infra/scripts/startup.sh.tpl, stage 10), which writes it to
+// /opt/app/ecosystem.config.js on the VM.
 // PM2 runs this as the dedicated locked `appsvc` user (not the operator), via
 // the pm2-appsvc systemd unit the startup script registers in stage 9.
 //

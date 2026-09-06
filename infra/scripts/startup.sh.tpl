@@ -4,7 +4,9 @@ set -euo pipefail
 # GCP re-runs metadata.startup-script on every boot, so every stage below
 # guards itself (marker comments, command -v checks, file-exists checks)
 # so re-runs are safe no-ops where nothing changed. Rendered via
-# templatefile() in infra/compute.tf with no template variables — the app
+# templatefile() in infra/compute.tf; the only template variable is
+# $${ecosystem_config} (stage 10), injected verbatim from
+# infra/scripts/ecosystem.config.js at terraform apply time. The app
 # runtime user is the hardcoded constant `appsvc`, and the operator's SSH key
 # is injected separately through instance metadata (compute.tf `ssh-keys`).
 
@@ -231,30 +233,20 @@ if [ ! -f "$PM2_UNIT" ]; then
 fi
 
 # --- Stage 10: PM2 app directory + Nginx reverse proxy to the app ---
-# ecosystem.config.js is written inline (not copied from a path on the
-# VM) since startup.sh.tpl is rendered into instance metadata as a
-# string — infra/scripts/ecosystem.config.js never gets uploaded to the
-# VM's filesystem on its own. Content must stay identical to that file.
+# ecosystem.config.js is written to the VM here because
+# infra/scripts/ecosystem.config.js never gets uploaded to the VM's
+# filesystem on its own (startup.sh.tpl is rendered into instance metadata
+# as a string). Its content is injected verbatim below via the
+# $${ecosystem_config} template variable, which Terraform fills from
+# infra/scripts/ecosystem.config.js at apply time — no manual copy to keep
+# in sync.
 mkdir -p /opt/app
 # Owned by appsvc, which PM2 runs as. The IAP deploy connects as an ephemeral
 # sudo-capable user and writes releases with `sudo install -o appsvc`.
 chown -R appsvc:appsvc /opt/app
 if [ ! -f /opt/app/ecosystem.config.js ]; then
   cat > /opt/app/ecosystem.config.js <<'EOF'
-module.exports = {
-  apps: [
-    {
-      name: "nextjs-app",
-      script: "current/server.js",
-      cwd: "/opt/app",
-      node_args: "--env-file=/opt/app/.env.production",
-      env: {
-        NODE_ENV: "production",
-        PORT: 3000,
-      },
-    },
-  ],
-};
+${ecosystem_config}
 EOF
 fi
 
