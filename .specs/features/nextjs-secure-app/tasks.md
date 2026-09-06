@@ -217,15 +217,16 @@ T4 → T5 → T6
 - Skill: NONE
 
 **Done when**:
-- [ ] `generateCsrfToken()` returns ≥32 bytes of Web Crypto randomness, base64url-encoded; two calls never collide
-- [ ] `verifyCsrfToken(submitted, cookie)` returns false when either side is null/empty or lengths differ, and otherwise compares every byte without early exit
-- [ ] The implementation uses Web Crypto only, so the module loads on both Edge and Node runtimes
-- [ ] Unit tests cover: match, mismatch, missing submitted, missing cookie, differing lengths, and that the token is not derived from any input (two calls with identical context differ)
-- [ ] Quick gate passes
+- [x] `generateCsrfToken()` returns ≥32 bytes of Web Crypto randomness, base64url-encoded; two calls never collide
+- [x] `verifyCsrfToken(submitted, cookie)` returns false when either side is null/empty or lengths differ, and otherwise compares every byte without early exit
+- [x] The implementation uses Web Crypto only, so the module loads on both Edge and Node runtimes
+- [x] Unit tests cover: match, mismatch, missing submitted, missing cookie, differing lengths, and that the token is not derived from any input (two calls with identical context differ)
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add csrf token generation and constant-time verification`
+**Status**: [x] Complete
 
 ---
 
