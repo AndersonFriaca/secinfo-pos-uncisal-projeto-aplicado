@@ -766,16 +766,17 @@ T25 → T26
 - Skill: NONE
 
 **Done when**:
-- [ ] Node.js 22 LTS is installed from NodeSource instead of the `apt` `nodejs` package, guarded so a re-run is a no-op
-- [ ] The guard checks the **installed major version**, not merely that `node` exists — a pre-existing Node 18 must be upgraded, not skipped
-- [ ] PM2 install and `pm2 startup` registration still work after the change
-- [ ] `/opt/app` exists and is owned by the deploy user so the pipeline writes without `sudo`
-- [ ] Shell gate passes
-- [ ] A note records that this is verified live only after a VM rebuild (`node --version` ≥ 20.9.0)
+- [x] Node.js 22 LTS is installed from NodeSource instead of the `apt` `nodejs` package, guarded so a re-run is a no-op
+- [x] The guard checks the **installed major version**, not merely that `node` exists — a pre-existing Node 18 must be upgraded, not skipped
+- [x] PM2 install and `pm2 startup` registration still work after the change
+- [x] `/opt/app` exists and is owned by the deploy user so the pipeline writes without `sudo`
+- [x] Shell gate passes
+- [x] A note records that this is verified live only after a VM rebuild (`node --version` ≥ 20.9.0)
 
 **Tests**: none (shell provisioning; `bash -n` is the gate, live check deferred to the operator)
 **Gate**: Shell
 **Commit**: `fix(infra): install node 22 lts for next.js compatibility`
+**Status**: [x] Complete
 
 ---
 
