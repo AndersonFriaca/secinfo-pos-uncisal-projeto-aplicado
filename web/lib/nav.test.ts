@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { headerNavLink } from "./nav";
 
-describe("headerNavLink (APP-01, APP-04)", () => {
+describe("headerNavLink (APP-04)", () => {
   it("links an anonymous visitor to /login", () => {
     expect(headerNavLink(null)).toEqual({ href: "/login", label: "Log in" });
   });
