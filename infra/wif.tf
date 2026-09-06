@@ -61,9 +61,18 @@ resource "google_service_account_iam_member" "deploy_wif" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
 }
 
-# Least privilege (TF-05): every grant below is scoped to the single app VM or
-# to the VM's own service account. The deploy SA holds ZERO project-level role,
-# and never roles/owner or roles/editor.
+# Least privilege (TF-05): every grant below is scoped to the single app VM, to
+# the VM's own service account, the repo, or a single minimal custom project
+# role. The deploy SA holds NO predefined project-level role, and never
+# roles/owner or roles/editor.
+#
+# The deploy SA's complete authority is:
+#   (a) instance-scoped roles/compute.instanceAdmin.v1 + roles/iap.tunnelResourceAccessor
+#       on the app VM only;
+#   (b) SA-scoped roles/iam.serviceAccountUser on the VM's default compute SA only;
+#   (c) repo-scoped roles/iam.workloadIdentityUser (principalSet:// for this repo);
+#   (d) one minimal custom project role (deployVmOperator) — read/list/operations-get
+#       only, no write permission, not a predefined project role, never owner/editor.
 #
 #   - roles/compute.instanceAdmin.v1 on google_compute_instance.vm only:
 #     start the instance when TERMINATED, read its status/IP, and publish the
@@ -105,4 +114,40 @@ resource "google_service_account_iam_member" "deploy_sa_user" {
   service_account_id = data.google_compute_default_service_account.default.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# One minimal custom project role (Amendment 2 / G1). `gcloud compute ssh
+# --tunnel-through-iap`, `gcloud compute instances start`, and `gcloud compute
+# instances describe` in .github/workflows/deploy.yml perform project-scoped
+# reads and poll long-running operations. Those permissions belong to project
+# and zone collections, not to an instance resource, so
+# google_compute_instance_iam_member cannot grant them. This custom role exists
+# ONLY so the keyless IAP deploy can read project metadata and poll compute
+# operations: read/list/operations-get only, no write permission, and
+# deliberately not a predefined project role.
+#
+# Permission set verified against Google's "Using IAP for TCP forwarding" IAM
+# reference (https://docs.cloud.google.com/iap/docs/using-tcp-forwarding):
+# `gcloud compute start-iap-tunnel|ssh|scp` additionally require
+# compute.projects.get and compute.instances.list at project scope;
+# compute.globalOperations.get covers the non-OS-Login metadata-key path;
+# compute.zoneOperations.get lets gcloud poll the instances.start operation.
+resource "google_project_iam_custom_role" "deploy_vm_operator" {
+  project     = var.project_id
+  role_id     = "deployVmOperator"
+  title       = "Deploy VM Operator (keyless IAP deploy)"
+  description = "Minimal project-scoped read/list/operations-get permissions the keyless GitHub Actions IAP deploy needs to read project metadata and poll compute operations. No write permission; not a predefined project role."
+  permissions = [
+    "compute.globalOperations.get",
+    "compute.instances.list",
+    "compute.projects.get",
+    "compute.zoneOperations.get",
+  ]
+  stage = "GA"
+}
+
+resource "google_project_iam_member" "deploy_vm_operator" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.deploy_vm_operator.id
+  member  = "serviceAccount:${google_service_account.deploy.email}"
 }
