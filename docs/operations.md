@@ -34,6 +34,10 @@ SSH. Afterwards reach the VM with `gcloud compute ssh --tunnel-through-iap`
 (the caller needs `roles/iap.tunnelResourceAccessor`), or set
 `operator_ssh_cidrs` to your CIDR before applying.
 
+The VM also sets `block-project-ssh-keys = "TRUE"`, so project-wide SSH
+keys are ignored — every key must be in *instance* metadata (the operator
+key Terraform injects, or the ephemeral key `gcloud compute ssh` adds).
+
 ## Health checks
 
 SSH in. Unless the caller's IP is in `operator_ssh_cidrs`, there is no

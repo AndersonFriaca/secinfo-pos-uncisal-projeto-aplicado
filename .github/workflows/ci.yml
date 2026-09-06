@@ -49,10 +49,10 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          bad=$(git grep -nE 'google_project_iam_member' -- infra/ \
+          bad=$(git grep -nE 'google_project_iam_(member|binding|policy)' -- infra/ \
                 | grep -v 'resource "google_project_iam_member" "deploy_vm_operator"' || true)
           if [ -n "$bad" ]; then
-            echo "::error::Unexpected google_project_iam_member binding in infra/ (only the deployVmOperator custom-role binding is allowed):"
+            echo "::error::Unexpected project-level IAM binding in infra/ (only the deployVmOperator custom-role google_project_iam_member is allowed):"
             echo "$bad"
             exit 1
           fi
@@ -69,13 +69,18 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          # Extract the permissions = [ ... ] list of the custom role and reject
-          # any mutating verb — the role exists only for reads and operation polls.
-          perms=$(awk '/resource "google_project_iam_custom_role" "deploy_vm_operator"/,/^}/' infra/wif.tf)
-          if echo "$perms" | grep -oE '"compute\.[a-zA-Z.]+"' \
-               | grep -qE '\.(set|setLabels|setMetadata|setCommonInstanceMetadata|create|delete|update|start|stop|reset|insert|use|attachDisk|detachDisk)"'; then
-            echo "::error::deployVmOperator custom role gained a mutating permission; it must stay read/list/operations-get only:"
-            echo "$perms" | grep -oE '"compute\.[a-zA-Z.]+"'
+          # Extract the permissions = [ ... ] list of the custom role and allow
+          # ONLY read verbs (.get / .list) on any service — an allowlist, so a
+          # new mutating verb we didn't think to denylist still fails.
+          perms=$(awk '/resource "google_project_iam_custom_role" "deploy_vm_operator"/,/^}/' infra/wif.tf \
+                  | grep -oE '"[a-z]+\.[a-zA-Z.]+"' | tr -d '"')
+          if [ -z "$perms" ]; then
+            echo "::error::could not parse deployVmOperator permissions"; exit 1
+          fi
+          bad=$(echo "$perms" | grep -vE '\.(get|list)$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::deployVmOperator custom role must hold only .get/.list permissions; found:"
+            echo "$bad"
             exit 1
           fi
 
@@ -106,6 +111,18 @@ jobs:
           fi
           if grep -qE '^\s*operator_ssh_cidrs\s*=.*0\.0\.0\.0/0' terraform.tfvars.example; then
             echo "::error::terraform.tfvars.example sets operator_ssh_cidrs to 0.0.0.0/0."
+            exit 1
+          fi
+
+      - name: Keyless deploy keeps ssh key off project metadata
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          # G6: without this, gcloud compute ssh writes its ephemeral key to
+          # project-wide metadata, needing a project-level write the deploy SA
+          # deliberately does not hold.
+          if ! grep -qE 'block-project-ssh-keys\s*=\s*"TRUE"' infra/compute.tf; then
+            echo "::error::infra/compute.tf must set metadata block-project-ssh-keys = \"TRUE\" so the keyless deploy stays instance-scoped."
             exit 1
           fi
 
