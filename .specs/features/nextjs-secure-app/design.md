@@ -197,7 +197,7 @@ PM2 runs `node current/server.js` with `PORT=3000`, `NODE_ENV=production`, and `
 
 | Workflow | Trigger | Steps |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | `pull_request` → `main` | checkout → setup-node 22 → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` (TEST-02, TEST-03) |
+| `.github/workflows/ci.yml` | `pull_request` → `main` | checkout → setup-node 24 → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` (TEST-02, TEST-03) |
 | `.github/workflows/deploy.yml` | `push` → `main` | `npm ci` → test → `next build` → `google-github-actions/auth` (WIF) → resolve IP / start VM if `TERMINATED` → rsync bundle → write `.env.production` from secrets → `pm2 reload` → poll `https://<ip>/` for 200, 2-minute timeout (CICD-01..08) |
 
 **Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `GCP_PROJECT_ID`, `GCP_ZONE`, `VM_SSH_PRIVATE_KEY`, `VM_SSH_USER`, `IDENTITY_PLATFORM_API_KEY`.
@@ -262,7 +262,7 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 | Concern | Location | Impact | Mitigation |
 | --- | --- | --- | --- |
 | `proxy.ts` runs on the Edge runtime — `firebase-admin`/Firestore cannot run there | `proxy.ts` | Putting session verification or rate limiting in the proxy would fail at runtime, possibly only in production | Hard boundary documented above: proxy does headers/Origin/CSRF only; everything Admin-SDK- or Firestore-backed lives in Route Handlers and Server Components |
-| Node 18 on the VM vs `next@16` requiring ≥20.9 | `infra/scripts/startup.sh.tpl` | The deployed bundle would refuse to start | Its own spec story (VM-01..02): install Node 22 LTS from NodeSource, verified by `node --version` on a fresh boot |
+| Node 18 on the VM vs `next@16` requiring ≥20.9 | `infra/scripts/startup.sh.tpl` | The deployed bundle would refuse to start | Its own spec story (VM-01..02): install Node 24 LTS from NodeSource, verified by `node --version` on a fresh boot |
 | The `principalSet://` member format for the WIF binding is intricate and easy to get subtly wrong | `infra/app.tf` | A wrong member silently grants nothing (deploy fails to authenticate) or too much | The design specifies the `attribute.repository/OWNER/REPO` form, but the implementing task must confirm it against the current provider docs before applying — the same "verify, don't guess" discipline that caught the Certbot plugin issue in the infra feature |
 | CSP with a nonce forces every page dynamic — no static optimisation, no PPR | whole app | Slower first byte, more CPU per request on a shared-core e2-micro | Accepted: SSR is an explicit requirement, and traffic is a grader plus a few test hits. Documented so it isn't mistaken for a misconfiguration |
 | `COEP: require-corp` breaks any cross-origin subresource that doesn't opt in | `lib/security/headers.ts` | A future third-party script or CDN font would silently fail to load | Safe today (shadcn is local source, `next/font` self-hosts). Flagged in the spec's assumptions so the trade-off is visible before someone adds a CDN |

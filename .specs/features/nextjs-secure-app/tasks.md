@@ -753,9 +753,9 @@ T22 → T23 → T24
 T25 → T26
 ```
 
-#### T25: Install Node.js 22 and prepare the app directory
+#### T25: Install Node.js 24 and prepare the app directory
 
-**What**: Replace the distribution's Node 18 with Node 22 LTS and make `/opt/app` writable by the deploy user.
+**What**: Replace the distribution's Node 18 with Node 24 LTS and make `/opt/app` writable by the deploy user.
 **Where**: `infra/scripts/startup.sh.tpl`
 **Depends on**: None
 **Reuses**: The existing idempotency-guard style already used by every stage in this script
@@ -766,16 +766,16 @@ T25 → T26
 - Skill: NONE
 
 **Done when**:
-- [x] Node.js 22 LTS is installed from NodeSource instead of the `apt` `nodejs` package, guarded so a re-run is a no-op
-- [x] The guard checks the **installed major version**, not merely that `node` exists — a pre-existing Node 18 must be upgraded, not skipped
+- [x] Node.js 24 LTS is installed from NodeSource instead of the `apt` `nodejs` package, guarded so a re-run is a no-op
+- [x] The guard checks the **installed major version** (`-lt` the required major), not merely that `node` exists — a pre-existing Node 18 must be upgraded, not skipped
 - [x] PM2 install and `pm2 startup` registration still work after the change
 - [x] `/opt/app` exists and is owned by the deploy user so the pipeline writes without `sudo`
 - [x] Shell gate passes
-- [x] A note records that this is verified live only after a VM rebuild (`node --version` ≥ 20.9.0)
+- [x] A note records that this is verified live only after a VM rebuild (`node --version` ≥ v24)
 
 **Tests**: none (shell provisioning; `bash -n` is the gate, live check deferred to the operator)
 **Gate**: Shell
-**Commit**: `fix(infra): install node 22 lts for next.js compatibility`
+**Commit**: `fix(infra): install node 24 lts for next.js compatibility`
 **Status**: [x] Complete
 
 ---
@@ -824,7 +824,7 @@ T27 → T28
 
 **Done when**:
 - [x] Triggers on `pull_request` targeting `main`
-- [x] Runs checkout → Node 22 setup → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test`, all with `working-directory: web`
+- [x] Runs checkout → Node 24 setup → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test`, all with `working-directory: web`
 - [x] Any failing step fails the job (no `continue-on-error`)
 - [x] Workflow gate passes (valid YAML, expected trigger and test step present)
 
@@ -967,7 +967,7 @@ Execution is strictly sequential. Cross-phase dependencies (e.g. T9 depends on T
 | T22: APIs + Identity Platform | 1 file, 2 tightly coupled resources | ✅ Granular |
 | T23: Firestore | 1 file, 1 resource | ✅ Granular |
 | T24: WIF + deploy SA | 1 file, 1 concern (keyless CI identity) | ✅ Granular |
-| T25: Node 22 + app dir | 1 file, 1 concern (runtime prerequisites) | ✅ Granular |
+| T25: Node 24 + app dir | 1 file, 1 concern (runtime prerequisites) | ✅ Granular |
 | T26: nginx tokens + PM2 entry | 1 file, 1 concern (serving the built app) | ✅ Granular |
 | T27-T28: workflows | 1 workflow each | ✅ Granular |
 | T29: OWASP docs | 1 file, 1 concern | ✅ Granular |

@@ -9,21 +9,21 @@ set -euo pipefail
 
 # --- Stage 1: base packages (apt install is naturally idempotent) ---
 # Node.js is NOT installed from apt here: Ubuntu 24.04 ships Node 18.19, but
-# next@16 requires engines.node >= 20.9.0. Stage 1b installs Node 22 LTS from
+# next@16 requires engines.node >= 20.9.0. Stage 1b installs Node 24 LTS from
 # NodeSource instead.
 apt-get update
 apt-get install -y nginx fail2ban snapd curl ca-certificates
 
-# --- Stage 1b: Node.js 22 LTS from NodeSource ---
+# --- Stage 1b: Node.js 24 LTS from NodeSource ---
 # Guard checks the installed MAJOR version, not merely that `node` exists, so a
-# pre-existing Node 18 (from a prior boot's apt package) is upgraded, not
-# skipped. A re-run once Node 22 is in place is a no-op.
-# Live check (after a VM rebuild): `node --version` must report >= v20.9.0.
-NODE_MAJOR_REQUIRED=22
+# pre-existing Node 18 (from a prior boot's apt package) or an older LTS is
+# upgraded, not skipped. A re-run once Node >= 24 is in place is a no-op.
+# Live check (after a VM rebuild): `node --version` must report >= v24.0.0.
+NODE_MAJOR_REQUIRED=24
 installed_node_major() {
   command -v node >/dev/null 2>&1 && node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/' || echo 0
 }
-if [ "$(installed_node_major)" != "$NODE_MAJOR_REQUIRED" ]; then
+if [ "$(installed_node_major)" -lt "$NODE_MAJOR_REQUIRED" ]; then
   curl -fsSL "https://deb.nodesource.com/setup_$${NODE_MAJOR_REQUIRED}.x" | bash -
   apt-get install -y nodejs
 fi
