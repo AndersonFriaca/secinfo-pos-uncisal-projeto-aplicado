@@ -600,14 +600,15 @@ T17 → T18 → T19 → T20 → T21
 - Skill: NONE
 
 **Done when**:
-- [ ] Renders an email + password form built from shadcn primitives, posting to `/api/auth/login`
-- [ ] Includes the CSRF token as a hidden field matching the cookie
-- [ ] Displays the generic error message returned by the route without revealing which field was wrong
-- [ ] `npm run build` succeeds
+- [x] Renders an email + password form built from shadcn primitives, posting to `/api/auth/login`
+- [x] Includes the CSRF token as a hidden field matching the cookie
+- [x] Displays the generic error message returned by the route without revealing which field was wrong
+- [x] `npm run build` succeeds
 
 **Tests**: none (form shell; validation and error semantics are unit-tested in T4 and T14)
 **Gate**: Build
 **Commit**: `feat(web): add login screen`
+**Status**: [x] Complete
 
 ---
 
