@@ -45,6 +45,13 @@ resource "google_compute_instance" "vm" {
 
   metadata = {
     ssh-keys = "${var.ssh_username}:${file(var.ssh_public_key_path)}"
+    # Force `gcloud compute ssh` (the keyless CI deploy path) to publish its
+    # ephemeral key to THIS instance's metadata rather than project-wide
+    # metadata. Project-wide writes need compute.projects.setCommonInstanceMetadata
+    # (a project-level write the deploy SA deliberately does not hold); the
+    # instance-scoped compute.instances.setMetadata it does hold covers this
+    # path. The operator's instance-level ssh-keys above are unaffected.
+    block-project-ssh-keys = "TRUE"
     startup-script = templatefile("${path.module}/scripts/startup.sh.tpl", {
       ecosystem_config = file("${path.module}/scripts/ecosystem.config.js")
     })
