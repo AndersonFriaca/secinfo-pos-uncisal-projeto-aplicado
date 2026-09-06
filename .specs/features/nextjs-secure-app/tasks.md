@@ -110,14 +110,15 @@ T1 → T2 → T3
 - Skill: NONE
 
 **Done when**:
-- [ ] Vitest installed and configured (node environment, `web/**/*.test.ts` picked up)
-- [ ] `package.json` exposes `test` (non-watch, exits non-zero on failure), `lint`, and `typecheck`
-- [ ] A trivial smoke test exists and passes, proving the runner is wired
-- [ ] `npm test`, `npm run lint`, and `npm run typecheck` all exit 0
+- [x] Vitest installed and configured (node environment, `web/**/*.test.ts` picked up)
+- [x] `package.json` exposes `test` (non-watch, exits non-zero on failure), `lint`, and `typecheck`
+- [x] A trivial smoke test exists and passes, proving the runner is wired
+- [x] `npm test`, `npm run lint`, and `npm run typecheck` all exit 0
 
 **Tests**: unit (the smoke test)
 **Gate**: Full
 **Commit**: `build(web): add vitest, lint and typecheck scripts`
+**Status**: [x] Complete
 
 ---
 
