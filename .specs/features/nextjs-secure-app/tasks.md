@@ -706,13 +706,14 @@ T22 → T23 → T24
 - Skill: NONE
 
 **Done when**:
-- [ ] `google_firestore_database` in Native mode with `location_id` matching the VM's region (`us-east1`), depending on the API enablement from T22
-- [ ] A comment records the free-tier quotas it must stay inside (1 GiB, 50k reads/day, 20k writes/day)
-- [ ] Terraform gate passes
+- [x] `google_firestore_database` in Native mode with `location_id` matching the VM's region (`us-east1`), depending on the API enablement from T22
+- [x] A comment records the free-tier quotas it must stay inside (1 GiB, 50k reads/day, 20k writes/day)
+- [x] Terraform gate passes
 
 **Tests**: none (Terraform config layer)
 **Gate**: Terraform
 **Commit**: `feat(infra): add firestore database for rate limit counters`
+**Status**: [x] Complete
 
 ---
 
