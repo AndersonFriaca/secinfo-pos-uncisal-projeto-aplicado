@@ -74,6 +74,36 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: infra/wif.tf:74-78 (infra)
 - last seen: 2026-09-06T16:24:45Z
 
+### L-011 - Before scoping a cloud IAM role from project level down to a single resource, enumerate the CLI's actual API calls against the provider's documented permission list: collection-level and operations reads (compute.projects.get, instances.list, zoneOperations.get) can never be granted by a resource-level binding, so 'zero project-level role' may be unachievable.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: nextjs-secure-app
+- evidence: infra/wif.tf:88-108 (infra)
+- last seen: 2026-09-06T17:13:05Z
+
+### L-012 - terraform validate is a syntax/type gate only - it accepts an empty source_ranges, a deleted IAM binding, a removed variable validation block, and a project-wide IAM member; add credential-free grep assertions to CI for each security invariant instead of trusting fmt/validate.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: nextjs-secure-app
+- evidence: infra/firewall.tf:10 (S2) (infra)
+- last seen: 2026-09-06T17:13:05Z
+
+### L-013 - A Terraform variable validation block is evaluated only at plan time with a concrete value, so terraform validate proves nothing about it - assert the rule's logic separately or accept it is review-only.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: nextjs-secure-app
+- evidence: infra/variables.tf:43-46 (S5) (infra)
+- last seen: 2026-09-06T17:13:05Z
+
+### L-014 - When an amendment narrows a resource an earlier feature's spec declared (firewall breadth, IAM scope), update that earlier spec/tasks in the same commit - the stale spec otherwise reads as the intended state and no validator compares a spec to the code.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `specs` · harmful: 0
+- features: nextjs-secure-app
+- evidence: .specs/features/gcp-infra-terraform/spec.md:45 (specs)
+- last seen: 2026-09-06T17:13:05Z
+
+### L-015 - When a change makes an access path opt-in via a variable defaulting to off, document that applying it to an existing deployment revokes the current access - the destroy is silent in plan output to anyone not reading resource-by-resource.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `docs` · harmful: 0
+- features: nextjs-secure-app
+- evidence: docs/operations.md:32-38 (docs)
+- last seen: 2026-09-06T17:13:05Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

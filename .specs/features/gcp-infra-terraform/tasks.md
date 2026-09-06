@@ -435,6 +435,7 @@ T14 → T15
 **Done when**:
 - [ ] `allow-ssh` (tcp:22), `allow-http` (tcp:80), `allow-https` (tcp:443), each with `source_ranges = ["0.0.0.0/0"]`, `target_tags = ["web-server"]`, `network = google_compute_network.custom.self_link`
 - [ ] No other firewall rule exists in this file or elsewhere in `infra/`
+- Amendment note: superseded for the app VM by `nextjs-secure-app` (AD-007) — `allow-ssh` is now opt-in via `var.operator_ssh_cidrs` and an `allow-iap-ssh` rule (`35.235.240.0/20`) is added, so this is no longer a fixed "3 firewall rules" surface.
 
 **Tests**: none
 **Gate**: Quick

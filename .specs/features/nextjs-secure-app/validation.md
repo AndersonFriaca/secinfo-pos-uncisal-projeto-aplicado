@@ -589,3 +589,208 @@ a `Done when` item, 1 genuinely unguarded.
 worth a follow-up task. Live verification of the IAP path (first real merge to
 `main` against a rebuilt VM) remains an operator step, already tracked in
 `.specs/STATE.md`.
+
+---
+
+## Amendment 2 — permission & firewall hardening
+
+**Date**: 2026-09-06
+**Diff range**: `c36095f..HEAD` (`c4ef818`, `719b205`, `449b77c`, `92bdf88`, `77d0e72`)
+**Verifier**: independent sub-agent (author ≠ verifier), read-only over the real tree
+**Verdict**: **PASS ✅** — both Amendment-1 residuals (R2 project-scoped
+`instanceAdmin.v1`, R3 public `tcp:22`) are closed as specified, all gates green,
+real-tree porcelain unchanged. **One P0 pre-deploy risk is flagged below** (G1):
+`gcloud compute ssh --tunnel-through-iap` has documented *project*-scoped
+permission requirements that an instance-scoped binding cannot satisfy. It does
+not invalidate the amendment's code, but it will very likely break the first live
+deploy and it makes TF-05's literal "no project-level role" wording unachievable.
+
+### Check 1 — Deploy SA: zero project-level roles
+
+| Requirement | Evidence | Result |
+| --- | --- | --- |
+| `roles/compute.instanceAdmin.v1` on the instance, not the project | `infra/wif.tf:88-94` — `google_compute_instance_iam_member.deploy_compute_admin`, `instance_name = google_compute_instance.vm.name`, `zone = google_compute_instance.vm.zone` | ✅ |
+| `roles/iap.tunnelResourceAccessor` on the same instance | `infra/wif.tf:96-102` — `google_iap_tunnel_instance_iam_member.deploy_iap_tunnel`, `instance = google_compute_instance.vm.name` | ✅ |
+| `roles/iam.serviceAccountUser` on the VM's attached SA | `infra/wif.tf:104-108` — `service_account_id = data.google_compute_default_service_account.default.name` (`infra/wif.tf:84-86`) | ✅ |
+| VM has no explicit `service_account` block (so the default compute SA *is* the attached identity) | `infra/compute.tf` — `grep -n 'service_account'` returns nothing; only `tags = ["web-server"]` at `infra/compute.tf:9` | ✅ |
+| `roles/iam.workloadIdentityUser` still repo-scoped on the deploy SA | `infra/wif.tf:58-62` — `principalSet://iam.googleapis.com/${…pool.github.name}/attribute.repository/${var.github_repository}` | ✅ |
+| No `google_project_iam_member` anywhere under `infra/` | `git grep -n 'google_project_iam_member' -- infra/` → no matches (exit 1) | ✅ |
+| Migration note for a future explicit VM SA | `infra/wif.tf:81-82` | ✅ |
+
+### Check 1b — `deploy.yml` call → authorizing permission
+
+| `deploy.yml` call | Permission needed | Granted by | Scope OK? |
+| --- | --- | --- | --- |
+| `instances describe` (`:76`, `:82`, `:90`) | `compute.instances.get` | `instanceAdmin.v1` @ instance (`wif.tf:88`) | ✅ instance |
+| `instances start` (`:79`) | `compute.instances.start` | same | ✅ instance |
+| `instances start` on an SA-attached VM | `iam.serviceAccounts.actAs` | `serviceAccountUser` @ default compute SA (`wif.tf:104`) | ✅ SA |
+| poll the start operation (gcloud, implicit at `:79`) | `compute.zoneOperations.get` / `compute.globalOperations.get` | **nothing** — operations are project/zone collections, not instance children | ❌ **project-scoped, ungranted** |
+| `ssh`/`scp --tunnel-through-iap` (`:108`, `:115`, `:144`, `:146`, `:156`) — tunnel | `iap.tunnelInstances.accessViaIAP` | `iap.tunnelResourceAccessor` @ instance (`wif.tf:96`) | ✅ instance |
+| `ssh` — publish the ephemeral key | `compute.instances.setMetadata` | `instanceAdmin.v1` @ instance | ✅ instance |
+| `ssh` — OS-Login / project-metadata probe gcloud performs before connecting | `compute.projects.get` (and `compute.instances.list`) | **nothing** | ❌ **project-scoped, ungranted** |
+| `curl https://$IP/` (`:166`) | none (public `:443`) | `infra/firewall.tf:51-61` | ✅ |
+| WIF token exchange (`:52-57`) | `iam.workloadIdentityUser` | `wif.tf:58-62` | ✅ |
+
+**Excess grants**: none found. `instanceAdmin.v1` is broader per-instance than
+`get`+`start`+`setMetadata` (it also carries `delete`, `reset`, `attachDisk`,
+`setServiceAccount` on that instance), but it is a predefined role bound to a
+single instance — no project reach. A custom role would be tighter; not required.
+
+**Missing grants**: see G1. Google's IAP TCP-forwarding docs list
+`compute.projects.get` as project-scoped and required for
+`gcloud compute ssh --tunnel-through-iap`, alongside instance-scoped
+`compute.instances.get` / `.list` / `iap.tunnelInstances.accessViaIAP` and
+`compute.instances.setMetadata` + `compute.globalOperations.get` for the
+non-OS-Login key path. `compute.instances.list`, `compute.projects.get`, and
+`*Operations.get` cannot be conferred by `google_compute_instance_iam_member`.
+This has **not** been contradicted by a live apply — the operator live steps are
+still deferred (`.specs/STATE.md:157-166`) — so it is a documented risk, not an
+observed failure. Same class of bug as the two `startup.sh.tpl` defects that only
+a real apply surfaced (`CLAUDE.md`, "Real-deployment corrections").
+
+### Check 2 — No static-IP reservation in CI
+
+| Requirement | Evidence | Result |
+| --- | --- | --- |
+| No `addresses create/describe/delete` in the workflow | `git grep -n 'compute addresses' -- .github/` → no matches | ✅ |
+| No `delete-access-config` / `add-access-config` | `git grep -n 'access-config' -- .github/` → no matches | ✅ |
+| On `TERMINATED`: start → poll `RUNNING` → read ephemeral `natIP` | `.github/workflows/deploy.yml:76-93` — `start` at `:79`, 18×5s poll at `:81-87`, hard fail at `:88`, `natIP` read at `:90-92` | ✅ |
+| Rationale recorded in the workflow itself | `.github/workflows/deploy.yml:70-75` (cites AD-003) | ✅ |
+| `GCP_REGION` gone from workflows | `git grep -n 'GCP_REGION' -- ':!*.md'` → no matches (exit 1); remaining hits are all intentional "no longer used" notes in `.specs/STATE.md:135,153,159`, `design.md:203`, `tasks.md:859` | ✅ |
+| Operator reservation path unchanged | `ops/vm-start.sh:41-67` still reserves `app-vm-ip`, re-points the access-config, then starts; `ops/vm-start.sh:2-13` explains why it lives here and not in Terraform | ✅ |
+| Health poll still uses the resolved IP | `deploy.yml:160-173` reads `steps.vm.outputs.ip` | ✅ |
+
+### Check 3 — Spec consistency
+
+| Requirement | Evidence | Result |
+| --- | --- | --- |
+| CICD AC 4 no longer reserves a static IP | `spec.md:239` — "SHALL start the instance, wait for it to reach `RUNNING`, and resolve its new ephemeral external IP … SHALL NOT reserve or attach a static IP" | ✅ |
+| TF AC 5 names the instance/SA-scoped grants and "no project-level role" | `spec.md:261` | ✅ (wording risk — see G1) |
+| TF Independent Test updated | `spec.md:268` — `gcloud compute instances get-iam-policy app-vm` + `gcloud projects get-iam-policy <project>` shows **no** deploy-SA binding | ✅ |
+| Gray-area row updated | `spec.md:41` | ✅ |
+| `tasks.md` T24/T28 `Done when` re-derived | `tasks.md:735`, `:844`, `:855`, `:859` | ✅ |
+| `design.md` decision table + secrets list updated | `design.md:63`, `:203`, `:213`, `:293` | ✅ |
+| `validate_spec.py` | exit 0, 0 errors / 0 warnings | ✅ |
+| `validate_tasks.py` | exit 0, 0 errors, 16 pre-existing `Tests: none` warnings (infra/CI tasks, unchanged by this amendment) | ✅ |
+| `validate_state.py nextjs-secure-app` | exit 0, 0 errors | ✅ |
+
+### Check 4 — Public SSH is opt-in
+
+| Requirement | Evidence | Result |
+| --- | --- | --- |
+| `operator_ssh_cidrs` is `list(string)`, default `[]` | `infra/variables.tf:38-41` | ✅ |
+| CIDR-shape validation | `infra/variables.tf:43-46` — `alltrue([for c in var.operator_ssh_cidrs : can(cidrhost(c, 0))])` | ✅ (plan-time only; see S5) |
+| `allow_ssh` `count`-gated on a non-empty list | `infra/firewall.tf:10` — `count = length(var.operator_ssh_cidrs) > 0 ? 1 : 0` | ✅ |
+| `source_ranges = var.operator_ssh_cidrs`, no `0.0.0.0/0` on `:22` | `infra/firewall.tf:13`; the only `0.0.0.0/0` in `infra/` are `firewall.tf:42` (`:80`) and `firewall.tf:54` (`:443`) | ✅ |
+| `allow-iap-ssh` still unconditional | `infra/firewall.tf:27-37`, `source_ranges = ["35.235.240.0/20"]`, no `count` | ✅ |
+| `allow-http` / `allow-https` unchanged | `infra/firewall.tf:39-61`, byte-identical in `git diff c36095f..HEAD -- infra/firewall.tf` | ✅ |
+| `terraform.tfvars.example` documents the var | `terraform.tfvars.example:9` | ✅ |
+| No other `.tf` reference to `allow_ssh` that would break under `count` | `git grep -n 'allow_ssh' -- infra/` → only `firewall.tf:5,9,11,25` (comments + the resource itself); no `allow_ssh[0]` and no `outputs.tf` reference | ✅ |
+
+### Check 5 — Default posture
+
+With `operator_ssh_cidrs = []`: the only `:22` ingress is `35.235.240.0/20`
+(`infra/firewall.tf:30`), so the operator reaches the VM **only** via
+`gcloud compute ssh --tunnel-through-iap`, and the calling principal needs
+`roles/iap.tunnelResourceAccessor`. Documented at `docs/operations.md:33-38`,
+`docs/security.md:20-27`, `docs/troubleshooting.md:10-13`,
+`docs/deployment.md:88`, `.specs/STATE.md:164`. CI is unaffected — every remote
+call in `deploy.yml` already uses `--tunnel-through-iap`
+(`:108,115,144,146,156`) and the IAP rule is unconditional.
+
+**Operational note for the handoff (not a defect):** running `terraform apply`
+on an already-deployed environment with `operator_ssh_cidrs` unset **destroys
+the existing `allow-ssh` rule**, dropping the operator's current direct SSH
+access with no prompt beyond the normal plan output. Intended, but an operator
+who is mid-session on a direct SSH connection and has never used IAP should set
+`operator_ssh_cidrs` first, or confirm `--tunnel-through-iap` works, before
+applying. No doc currently states this explicitly (see G3).
+
+### Check 6 — Docs
+
+| File | Evidence | Result |
+| --- | --- | --- |
+| `docs/security.md:9-27` | Exposed surface re-stated as IAP-`:22` always + `operator_ssh_cidrs` opt-in + 80/443; heading now "IAP tunnel by default" | ✅ |
+| `docs/operations.md:32-38` | Health-check SSH goes through `--tunnel-through-iap`, names `roles/iap.tunnelResourceAccessor` | ✅ |
+| `docs/troubleshooting.md:10-13`, `:70` | `--tunnel-through-iap` added, with the `operator_ssh_cidrs` caveat | ✅ |
+| `docs/deployment.md:31-33`, `:88` | tfvars list includes `operator_ssh_cidrs`; smoke-test SSH uses the tunnel | ✅ |
+| `README.md:8-12` | "SSH reachable only through an IAP tunnel by default (direct `:22` is opt-in via `operator_ssh_cidrs`)" | ✅ |
+| `docs/architecture.md:9`, `:46-47`, `:64` | Diagram + component table re-described | ⚠️ minor — `docs/architecture.md:43` still labels the box "Firewall (22 / 80 / 443 only…)" without the IAP-vs-CIDR distinction the two lines below now make |
+| `docs/application.md:29-33` | `GCP_REGION` removed from the secrets list | ✅ |
+| `design.md:214` | still reads "The public `allow-ssh` rule stays for the operator" | ⚠️ stale (G2) |
+| `.specs/features/gcp-infra-terraform/spec.md:45`, `tasks.md:436`, `design.md:98-100` | still describe `tcp:22` from `0.0.0.0/0` and "3 firewall rules" as the intended surface | ⚠️ stale (G2) — prior feature's spec, now contradicted by `infra/firewall.tf` |
+
+### Gate results
+
+| Gate | Result |
+| --- | --- |
+| `terraform fmt -check -recursive infra` | exit 0 |
+| `terraform -chdir=infra validate` | Success, exit 0 |
+| `terraform -chdir=infra/bootstrap validate` | Success, exit 0 |
+| Both workflow YAMLs parse (`yaml.safe_load`) | ok / ok |
+| `cd web && npm test` | 15 files, **149 passed**, 0 failed — unchanged, `web/` untouched by this diff |
+| `git status --porcelain` | empty before and after the sensor |
+| `git ls-files` secret sweep | no key material, no tracked `terraform.tfvars` / `backend.hcl` / `.env` / `.pem` |
+| `validate_spec.py` / `validate_tasks.py` / `validate_state.py` | 0 / 0 / 0 |
+
+### Discrimination sensor (light, IaC)
+
+Run in a throwaway `git worktree add --detach` at `HEAD`; real-tree
+`git status --porcelain` was empty before and after and the worktree was removed
+with `--force` + `git worktree prune`.
+
+| # | Mutation | File | Caught by | Killed? |
+| --- | --- | --- | --- | --- |
+| S1 | `google_compute_instance_iam_member.deploy_compute_admin` → `google_project_iam_member` (project-wide `instanceAdmin.v1`) | `infra/wif.tf:88` | `fmt` ✅ pass, `validate` ✅ pass — **only** the `git grep google_project_iam_member -- infra/` check in the task's `Done when` catches it, and that grep is prose, not a script | ❌ survived all automated gates |
+| S2 | Removed the `count` guard so `allow_ssh` always creates with `source_ranges = []` | `infra/firewall.tf:10` | `fmt` ✅ pass, `validate` ✅ pass. **`terraform validate` does not catch an empty `source_ranges`** — the API rejects it only at apply | ❌ survived |
+| S3 | `operator_ssh_cidrs` default → `["0.0.0.0/0"]` (public `:22` back on by default) | `infra/variables.tf:40` | `fmt`/`validate` pass; a `grep '0\.0\.0\.0/0' infra/variables.tf` would flag it, but no gate runs that grep | ❌ survived |
+| S4 | Deleted `google_service_account_iam_member.deploy_sa_user` (the `actAs` binding) | `infra/wif.tf:104-108` | `fmt`/`validate` pass — `data.google_compute_default_service_account` becomes unreferenced, which is legal HCL | ❌ survived |
+| S5 | Deleted the `operator_ssh_cidrs` CIDR `validation` block | `infra/variables.tf:43-46` | `fmt`/`validate` pass — `validation` blocks are evaluated at plan time with a concrete value, and `terraform validate` supplies none | ❌ survived |
+
+**Sensor depth**: lightweight (5 mutations, IaC).
+**Result**: 0/5 killed by the mechanical gates.
+
+**Honest reading**: `terraform fmt` + `terraform validate` are syntax/type gates.
+They cannot see IAM *scope*, firewall *breadth*, a missing binding, or a deleted
+`validation` block, and without GCP credentials there is no `terraform plan` to
+raise the bar. Every security property this amendment adds is therefore enforced
+by **review and the `Done when` prose only** — not by code. That is a structural
+limitation of the toolchain, not an implementation defect, but it means a future
+edit can silently undo any of R2/R3 with all gates green. The cheapest real
+improvement is a handful of repo-local `grep` assertions wired into `ci.yml`
+(no project ID, no credentials needed): assert no `google_project_iam_member`
+under `infra/`, assert no `0.0.0.0/0` on a `:22` rule, assert `allow_ssh` carries
+a `count`. See G4.
+
+### Ranked gaps
+
+1. **G1 — P0, pre-deploy blocker.** `gcloud compute ssh --tunnel-through-iap`
+   requires project-scoped `compute.projects.get` (and `compute.instances.list`,
+   plus `compute.globalOperations.get` / `compute.zoneOperations.get` for the
+   non-OS-Login key path and start-operation polling) per Google's IAP
+   TCP-forwarding docs. None can be granted by `google_compute_instance_iam_member`
+   or `google_service_account_iam_member`. `deploy.yml:79-92` and `:108-158` all
+   depend on those calls. The first live deploy will most likely fail with a
+   `compute.projects.get` denial. Fix: a minimal **custom project role** holding
+   exactly `compute.projects.get`, `compute.instances.list`,
+   `compute.zoneOperations.get`, `compute.globalOperations.get` — still no
+   predefined project-level role — and re-word `spec.md:261` / `tasks.md:735`
+   from "no project-level role" to "no *predefined* project-level role; a
+   least-privilege custom role for the read-only project probes gcloud requires."
+   Not verifiable without a live apply; do not close the amendment's live steps
+   without it.
+2. **G2 — Minor, spec staleness.** `design.md:214` still says the public
+   `allow-ssh` rule stays for the operator. `.specs/features/gcp-infra-terraform/`
+   (`spec.md:45`, `tasks.md:436`, `design.md:98-100`) still describes `tcp:22`
+   from `0.0.0.0/0` and "3 firewall rules" as intended. Both now contradict
+   `infra/firewall.tf`.
+3. **G3 — Minor, operational.** No doc warns that `terraform apply` with
+   `operator_ssh_cidrs` unset destroys an existing `allow-ssh` rule and drops the
+   operator's current direct SSH access. Add one line to `docs/operations.md` or
+   `docs/deployment.md`.
+4. **G4 — Minor, enforcement.** 0/5 sensor mutations were killed. The IAM-scope
+   and firewall-breadth invariants have no mechanical gate. Add the three
+   credential-free `grep` assertions above to `ci.yml`.
+5. **G5 — Cosmetic.** `docs/architecture.md:43` still labels the firewall box
+   "22 / 80 / 443 only" without the IAP-vs-opt-in-CIDR distinction its own
+   following lines now draw.

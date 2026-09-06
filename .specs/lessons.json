@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 11,
+  "next_id": 16,
   "lessons": [
     {
       "id": "L-001",
@@ -185,6 +185,96 @@
       ],
       "created": "2026-09-06T16:24:45Z",
       "last_seen": "2026-09-06T16:24:45Z"
+    },
+    {
+      "id": "L-011",
+      "key": "ac_gap::before scoping a cloud iam role from project level down to a single resource enumerate the cli s actual api calls against the provider s documented permission list collection level and operations reads compute projects get instances list zoneoperations get can never be granted by a resource level binding so zero project level role may be unachievable",
+      "text": "Before scoping a cloud IAM role from project level down to a single resource, enumerate the CLI's actual API calls against the provider's documented permission list: collection-level and operations reads (compute.projects.get, instances.list, zoneOperations.get) can never be granted by a resource-level binding, so 'zero project-level role' may be unachievable.",
+      "signal": "ac_gap",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "infra/wif.tf:88-108 (infra)"
+      ],
+      "created": "2026-09-06T17:13:05Z",
+      "last_seen": "2026-09-06T17:13:05Z"
+    },
+    {
+      "id": "L-012",
+      "key": "surviving_mutant::terraform validate is a syntax type gate only it accepts an empty source ranges a deleted iam binding a removed variable validation block and a project wide iam member add credential free grep assertions to ci for each security invariant instead of trusting fmt validate",
+      "text": "terraform validate is a syntax/type gate only - it accepts an empty source_ranges, a deleted IAM binding, a removed variable validation block, and a project-wide IAM member; add credential-free grep assertions to CI for each security invariant instead of trusting fmt/validate.",
+      "signal": "surviving_mutant",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "infra/firewall.tf:10 (S2) (infra)"
+      ],
+      "created": "2026-09-06T17:13:05Z",
+      "last_seen": "2026-09-06T17:13:05Z"
+    },
+    {
+      "id": "L-013",
+      "key": "surviving_mutant::a terraform variable validation block is evaluated only at plan time with a concrete value so terraform validate proves nothing about it assert the rule s logic separately or accept it is review only",
+      "text": "A Terraform variable validation block is evaluated only at plan time with a concrete value, so terraform validate proves nothing about it - assert the rule's logic separately or accept it is review-only.",
+      "signal": "surviving_mutant",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "infra/variables.tf:43-46 (S5) (infra)"
+      ],
+      "created": "2026-09-06T17:13:05Z",
+      "last_seen": "2026-09-06T17:13:05Z"
+    },
+    {
+      "id": "L-014",
+      "key": "ac_gap::when an amendment narrows a resource an earlier feature s spec declared firewall breadth iam scope update that earlier spec tasks in the same commit the stale spec otherwise reads as the intended state and no validator compares a spec to the code",
+      "text": "When an amendment narrows a resource an earlier feature's spec declared (firewall breadth, IAM scope), update that earlier spec/tasks in the same commit - the stale spec otherwise reads as the intended state and no validator compares a spec to the code.",
+      "signal": "ac_gap",
+      "scope": "specs",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        ".specs/features/gcp-infra-terraform/spec.md:45 (specs)"
+      ],
+      "created": "2026-09-06T17:13:05Z",
+      "last_seen": "2026-09-06T17:13:05Z"
+    },
+    {
+      "id": "L-015",
+      "key": "ac_gap::when a change makes an access path opt in via a variable defaulting to off document that applying it to an existing deployment revokes the current access the destroy is silent in plan output to anyone not reading resource by resource",
+      "text": "When a change makes an access path opt-in via a variable defaulting to off, document that applying it to an existing deployment revokes the current access - the destroy is silent in plan output to anyone not reading resource-by-resource.",
+      "signal": "ac_gap",
+      "scope": "docs",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "docs/operations.md:32-38 (docs)"
+      ],
+      "created": "2026-09-06T17:13:05Z",
+      "last_seen": "2026-09-06T17:13:05Z"
     }
   ]
 }
