@@ -15,7 +15,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { buildSecurityHeaders } from "./lib/security/headers";
-import { verifyCsrfToken } from "./lib/security/csrf";
+import { generateCsrfToken, verifyCsrfToken } from "./lib/security/csrf";
 
 /** Methods that never mutate state and so skip the CSRF check (SEC-23). */
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -111,14 +111,30 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Seed a CSRF token on first contact so every server-rendered form has a value
+  // to embed, and keep re-using it once set. `SameSite=Strict`, `Secure` (SEC-21,
+  // SEC-24 — the token is fresh randomness, never derived from the request).
+  const existingCsrf = request.cookies.get(CSRF_COOKIE)?.value ?? null;
+  const csrfToken = existingCsrf ?? generateCsrfToken();
+
   // Forward the nonce to the framework: `x-nonce` for Server Components and the
   // CSP on the request so Next extracts `'nonce-<value>'` for its own scripts.
+  // `x-csrf-token` exposes the current token to Server Components rendering forms.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
+  requestHeaders.set(CSRF_HEADER, csrfToken);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   applyHeaders(response, securityHeaders);
+  if (!existingCsrf) {
+    response.cookies.set(CSRF_COOKIE, csrfToken, {
+      sameSite: "strict",
+      secure: true,
+      path: "/",
+      httpOnly: false,
+    });
+  }
   return response;
 }
 

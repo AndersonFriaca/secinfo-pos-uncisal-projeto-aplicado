@@ -547,14 +547,17 @@ T17 → T18 → T19 → T20 → T21
 - Skill: NONE
 
 **Done when**:
-- [ ] Issues the CSRF cookie (`SameSite=Strict`, `Secure`) when absent, and exposes the current token to forms
-- [ ] Sets `lang`, self-hosted fonts via `next/font`, and no external resource references (keeps `COEP: require-corp` satisfiable)
-- [ ] Renders without any CSP violation in production mode (no inline style/script outside the nonce)
-- [ ] `npm run build` succeeds
+- [x] Issues the CSRF cookie (`SameSite=Strict`, `Secure`) when absent, and exposes the current token to forms
+- [x] Sets `lang`, self-hosted fonts via `next/font`, and no external resource references (keeps `COEP: require-corp` satisfiable)
+- [x] Renders without any CSP violation in production mode (no inline style/script outside the nonce)
+- [x] `npm run build` succeeds
 
 **Tests**: none (shell; the CSRF logic it calls is unit-tested in T6)
 **Gate**: Build
 **Commit**: `feat(web): add root layout with csrf cookie seeding`
+**Status**: [x] Complete
+
+**Implementation note**: the CSRF cookie is seeded in `web/proxy.ts` (the Edge gate every request already passes through), not `web/app/layout.tsx` — Next.js 16 forbids `cookies().set()` during Server Component rendering ("Setting cookies is not supported during Server Component rendering", `cookies` API reference). The proxy forwards the token as the `x-csrf-token` request header so the layout and form pages can embed it.
 
 ---
 
