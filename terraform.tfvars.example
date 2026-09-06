@@ -6,7 +6,7 @@ region                = "us-east1"              # Always Free eligible region
 zone                  = "us-east1-b"            # Always Free eligible zone
 ssh_username          = "ubuntu"                # OS login user injected via metadata
 ssh_public_key_path   = "~/.ssh/id_ed25519.pub" # path to your existing SSH public key
-operator_ssh_cidrs    = []                       # e.g. ["203.0.113.4/32"]; empty = IAP-only SSH
+operator_ssh_cidrs    = ["0.0.0.0/0"]            # source CIDRs for :22; narrow to harden, e.g. ["203.0.113.4/32"]
 
 # infra/bootstrap/ only:
 billing_account_name        = "My Billing Account" # from `gcloud billing accounts list`
