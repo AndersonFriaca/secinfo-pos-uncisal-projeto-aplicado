@@ -135,13 +135,14 @@ T1 → T2 → T3
 - Skill: NONE
 
 **Done when**:
-- [ ] shadcn/ui initialised; `web/components/ui/` contains at least `button`, `input`, `label`, `card`, and `alert`
-- [ ] Fonts are self-hosted via `next/font` (no external CDN request), so `COEP: require-corp` stays satisfiable
-- [ ] `npm run build` still succeeds
+- [x] shadcn/ui initialised; `web/components/ui/` contains at least `button`, `input`, `label`, `card`, and `alert`
+- [x] Fonts are self-hosted via `next/font` (no external CDN request), so `COEP: require-corp` stays satisfiable
+- [x] `npm run build` still succeeds
 
 **Tests**: none (vendored UI primitives; build gate only)
 **Gate**: Build
 **Commit**: `feat(web): add shadcn/ui component primitives`
+**Status**: [x] Complete
 
 ---
 
