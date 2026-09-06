@@ -625,13 +625,14 @@ T17 → T18 → T19 → T20 → T21
 - Skill: NONE
 
 **Done when**:
-- [ ] The signup form posts to `/api/auth/signup` with the CSRF token and states the password rules up front
-- [ ] `web/app/verify-email/page.tsx` explains the pending verification and offers a resend posting to `/api/auth/resend-verification`
-- [ ] `npm run build` succeeds
+- [x] The signup form posts to `/api/auth/signup` with the CSRF token and states the password rules up front
+- [x] `web/app/verify-email/page.tsx` explains the pending verification and offers a resend posting to `/api/auth/resend-verification`
+- [x] `npm run build` succeeds
 
 **Tests**: none (form shells; the rules and endpoints they exercise are unit-tested in T4, T13, and T16)
 **Gate**: Build
 **Commit**: `feat(web): add signup and verify-email screens`
+**Status**: [x] Complete
 
 ---
 
