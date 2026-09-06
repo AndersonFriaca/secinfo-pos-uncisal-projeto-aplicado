@@ -62,6 +62,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: M16 web/app/api/auth/login/route.ts:164 (web/app/api)
 - last seen: 2026-09-06T15:27:05Z
 
+### L-009 - When a config file must be duplicated into an embedded heredoc, enforce parity with a diff-based gate command, not a "keep these identical" comment — drift passes every syntax gate silently.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `infra/scripts` · harmful: 0
+- features: nextjs-secure-app
+- evidence: infra/scripts/startup.sh.tpl:244-257 (mutation 5, amendment sensor) (infra/scripts)
+- last seen: 2026-09-06T16:24:44Z
+
+### L-010 - A "least privilege" acceptance criterion that only forbids owner/editor still admits a project-scoped predefined admin role; state the required resource scope in the AC, not just the role names.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: nextjs-secure-app
+- evidence: infra/wif.tf:74-78 (infra)
+- last seen: 2026-09-06T16:24:45Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

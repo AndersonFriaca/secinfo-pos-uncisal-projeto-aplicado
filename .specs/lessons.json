@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 9,
+  "next_id": 11,
   "lessons": [
     {
       "id": "L-001",
@@ -149,6 +149,42 @@
       ],
       "created": "2026-09-06T15:27:05Z",
       "last_seen": "2026-09-06T15:27:05Z"
+    },
+    {
+      "id": "L-009",
+      "key": "surviving_mutant::when a config file must be duplicated into an embedded heredoc enforce parity with a diff based gate command not a keep these identical comment drift passes every syntax gate silently",
+      "text": "When a config file must be duplicated into an embedded heredoc, enforce parity with a diff-based gate command, not a \"keep these identical\" comment — drift passes every syntax gate silently.",
+      "signal": "surviving_mutant",
+      "scope": "infra/scripts",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "infra/scripts/startup.sh.tpl:244-257 (mutation 5, amendment sensor) (infra/scripts)"
+      ],
+      "created": "2026-09-06T16:24:44Z",
+      "last_seen": "2026-09-06T16:24:44Z"
+    },
+    {
+      "id": "L-010",
+      "key": "ac_gap::a least privilege acceptance criterion that only forbids owner editor still admits a project scoped predefined admin role state the required resource scope in the ac not just the role names",
+      "text": "A \"least privilege\" acceptance criterion that only forbids owner/editor still admits a project-scoped predefined admin role; state the required resource scope in the AC, not just the role names.",
+      "signal": "ac_gap",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "infra/wif.tf:74-78 (infra)"
+      ],
+      "created": "2026-09-06T16:24:45Z",
+      "last_seen": "2026-09-06T16:24:45Z"
     }
   ]
 }
