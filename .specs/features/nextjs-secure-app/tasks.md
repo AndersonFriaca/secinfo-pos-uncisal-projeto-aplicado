@@ -682,13 +682,14 @@ T22 → T23 → T24
 - Skill: NONE
 
 **Done when**:
-- [ ] `google_project_service` resources enable `identitytoolkit.googleapis.com`, `firestore.googleapis.com`, and `iamcredentials.googleapis.com`
-- [ ] `google_identity_platform_config` sets `sign_in.email.enabled = true` and `password_required = true`, with `depends_on` the API enablement
-- [ ] Terraform gate passes
+- [x] `google_project_service` resources enable `identitytoolkit.googleapis.com`, `firestore.googleapis.com`, and `iamcredentials.googleapis.com`
+- [x] `google_identity_platform_config` sets `sign_in.email.enabled = true` and `password_required = true`, with `depends_on` the API enablement
+- [x] Terraform gate passes
 
 **Tests**: none (Terraform config layer; static validation is the gate)
 **Gate**: Terraform
 **Commit**: `feat(infra): enable identity platform with email sign-in`
+**Status**: [x] Complete
 
 ---
 
