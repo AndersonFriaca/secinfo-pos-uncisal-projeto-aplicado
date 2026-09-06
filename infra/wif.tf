@@ -61,8 +61,16 @@ resource "google_service_account_iam_member" "deploy_wif" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
 }
 
-# Least privilege (TF-05): enough to resolve the VM's external IP and start it
-# when TERMINATED — nothing more. Never roles/owner or roles/editor.
+# Least privilege (TF-05): exactly three project roles, never roles/owner or
+# roles/editor.
+#   - roles/compute.instanceAdmin.v1: start the instance when TERMINATED,
+#     resolve/attach its external IP, AND publish the ephemeral SSH key that
+#     `gcloud compute ssh` mints into instance metadata for the deploy.
+#   - roles/iam.serviceAccountUser: act as the VM's attached service account,
+#     required for the compute operations above.
+#   - roles/iap.tunnelResourceAccessor: open the IAP TCP-forwarding tunnel to
+#     the VM's port 22, so the deploy authenticates to sshd entirely through
+#     Workload Identity Federation with no stored SSH key.
 resource "google_project_iam_member" "deploy_compute_admin" {
   project = var.project_id
   role    = "roles/compute.instanceAdmin.v1"
@@ -72,5 +80,11 @@ resource "google_project_iam_member" "deploy_compute_admin" {
 resource "google_project_iam_member" "deploy_sa_user" {
   project = var.project_id
   role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_project_iam_member" "deploy_iap_tunnel" {
+  project = var.project_id
+  role    = "roles/iap.tunnelResourceAccessor"
   member  = "serviceAccount:${google_service_account.deploy.email}"
 }

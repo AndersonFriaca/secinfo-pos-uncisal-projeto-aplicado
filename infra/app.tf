@@ -8,6 +8,10 @@ locals {
     "identitytoolkit.googleapis.com",
     "firestore.googleapis.com",
     "iamcredentials.googleapis.com",
+    # IAP TCP forwarding: the keyless GitHub Actions deploy reaches sshd
+    # through an IAP tunnel (gcloud compute ssh --tunnel-through-iap), so no
+    # SSH key or SSH-user secret is stored anywhere.
+    "iap.googleapis.com",
   ]
 }
 
