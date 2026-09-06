@@ -60,7 +60,7 @@ graph TD
 | PM2 + `pm2 startup` boot survival | `infra/scripts/startup.sh.tpl` (stage 9) | The app is registered with the existing PM2 instance; `pm2 save` makes it survive reboots. |
 | `infra/scripts/ecosystem.config.js` | Same | Already declares `name: nextjs-app`, `cwd: /opt/app`, `PORT: 3000`. Needs its `script`/`args` pointed at the standalone server. |
 | Terraform main root + provider config | `infra/*.tf` | New GCP resources (Identity Platform, Firestore, WIF) are added here, reusing `user_project_override`/`billing_project` already set. |
-| VM start/stop with IP reservation | `ops/vm-start.sh`, `ops/vm-stop.sh` | The deploy workflow reproduces this sequence when the VM is stopped (CICD-04). |
+| VM start/stop with IP reservation | `ops/vm-start.sh`, `ops/vm-stop.sh` | Operator-only. The deploy workflow does **not** reproduce the reservation: when the VM is stopped it just runs `gcloud compute instances start`, waits for `RUNNING`, and reads the new ephemeral IP (CICD-04). The static-IP reservation stays here for the operator's stable-IP-for-a-session need. |
 | `.gitignore` secret patterns | `.gitignore` | Extended with `.env*` app-level entries; the existing rules already block `.env`, keys, and tfvars. |
 | Free-tier and teardown documentation | `docs/` | New app docs slot in beside them; the OWASP section lands in `README.md` per DOCS-01. |
 
@@ -200,7 +200,7 @@ PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_E
 | `.github/workflows/ci.yml` | `pull_request` → `main` | checkout → setup-node 24 → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` (TEST-02, TEST-03) |
 | `.github/workflows/deploy.yml` | `push` → `main` | `npm ci` → test → `next build` → `google-github-actions/auth` (WIF) → resolve IP / start VM if `TERMINATED` → `gcloud compute scp --tunnel-through-iap` bundle → copy `.env.production` from secrets over the tunnel (`install -m 600 -o appsvc`) → `pm2 reload` as `appsvc` → poll `https://<ip>/` for 200, 2-minute timeout (CICD-01..08) |
 
-**Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`. No SSH key or SSH-user secret — VM access is entirely through the WIF-federated deploy SA over an IAP tunnel.
+**Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`. `GCP_REGION` is no longer consumed — dropping the static-IP reservation removed the only region-scoped call. No SSH key or SSH-user secret — VM access is entirely through the WIF-federated deploy SA over an IAP tunnel.
 
 ### Terraform additions — `infra/app.tf`
 

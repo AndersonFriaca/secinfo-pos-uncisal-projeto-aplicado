@@ -63,31 +63,29 @@ jobs:
         id: vm
         env:
           ZONE: ${{ secrets.GCP_ZONE }}
-          REGION: ${{ secrets.GCP_REGION }}
           PROJECT: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
           INSTANCE=app-vm
-          ADDRESS_NAME=app-vm-ip
+          # The VM uses an ephemeral external IP by design (AD-003): a reserved
+          # static IP is billed whenever it is not attached to a *running*
+          # instance. CI only needs *some* reachable IP to health-check, and it
+          # resolves that dynamically below — so there is no reserve/attach
+          # dance here. The operator's stable-IP-for-a-session need is served by
+          # ops/vm-start.sh, which keeps the reservation.
           STATUS="$(gcloud compute instances describe "$INSTANCE" \
             --zone="$ZONE" --project="$PROJECT" --format='value(status)')"
           if [ "$STATUS" = "TERMINATED" ]; then
-            if ! gcloud compute addresses describe "$ADDRESS_NAME" \
-                --region="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
-              gcloud compute addresses create "$ADDRESS_NAME" \
-                --region="$REGION" --project="$PROJECT" --network-tier=STANDARD
-            fi
-            RESERVED_IP="$(gcloud compute addresses describe "$ADDRESS_NAME" \
-              --region="$REGION" --project="$PROJECT" --format='value(address)')"
-            gcloud compute instances delete-access-config "$INSTANCE" \
-              --zone="$ZONE" --project="$PROJECT" \
-              --access-config-name="External NAT" || true
-            gcloud compute instances add-access-config "$INSTANCE" \
-              --zone="$ZONE" --project="$PROJECT" \
-              --access-config-name="External NAT" \
-              --address="$RESERVED_IP" --network-tier=STANDARD
             gcloud compute instances start "$INSTANCE" \
               --zone="$ZONE" --project="$PROJECT"
+            for i in $(seq 1 18); do
+              STATUS="$(gcloud compute instances describe "$INSTANCE" \
+                --zone="$ZONE" --project="$PROJECT" --format='value(status)')"
+              [ "$STATUS" = "RUNNING" ] && break
+              echo "waiting for $INSTANCE to reach RUNNING (attempt $i, status=$STATUS)..."
+              sleep 5
+            done
+            [ "$STATUS" = "RUNNING" ] || { echo "$INSTANCE did not reach RUNNING" >&2; exit 1; }
           fi
           IP="$(gcloud compute instances describe "$INSTANCE" \
             --zone="$ZONE" --project="$PROJECT" \
