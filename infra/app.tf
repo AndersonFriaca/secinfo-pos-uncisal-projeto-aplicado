@@ -7,7 +7,11 @@ locals {
   app_services = [
     "identitytoolkit.googleapis.com",
     "firestore.googleapis.com",
+    # Service Accounts + custom roles for the keyless deploy identity, and the
+    # STS endpoint google-github-actions/auth exchanges the GitHub OIDC token at.
+    "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "sts.googleapis.com",
     # IAP TCP forwarding: the keyless GitHub Actions deploy reaches sshd
     # through an IAP tunnel (gcloud compute ssh --tunnel-through-iap), so no
     # SSH key or SSH-user secret is stored anywhere.

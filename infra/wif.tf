@@ -52,6 +52,8 @@ resource "google_service_account" "deploy" {
   project      = var.project_id
   account_id   = "github-deploy"
   display_name = "GitHub Actions deploy"
+
+  depends_on = [google_project_service.app]
 }
 
 # Only tokens from this repository may impersonate the deploy SA (TF-05).
@@ -89,12 +91,21 @@ resource "google_service_account_iam_member" "deploy_wif" {
 #     `iam.serviceAccounts.actAs` on that SA, which `gcloud compute` requires
 #     for the instance operations above. The VM has no explicit `service_account`
 #     block in compute.tf, so its attached identity is the project's default
-#     compute service account, resolved by the data source below.
+#     compute service account, built from the project number below.
 #     NOTE: if the operator later attaches an explicit service account to the
 #     VM, this binding's target MUST change to that service account.
 
-data "google_compute_default_service_account" "default" {
-  project = var.project_id
+data "google_project" "this" {
+  project_id = var.project_id
+}
+
+locals {
+  # The VM has no explicit service_account block in compute.tf, so it runs as
+  # the project's default compute SA. Built from the project number rather than
+  # read via google_compute_default_service_account so `terraform plan` does not
+  # depend on iam.googleapis.com being enabled yet (cloudresourcemanager, which
+  # google_project needs, is on by default).
+  default_compute_sa = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_compute_instance_iam_member" "deploy_compute_admin" {
@@ -114,7 +125,7 @@ resource "google_iap_tunnel_instance_iam_member" "deploy_iap_tunnel" {
 }
 
 resource "google_service_account_iam_member" "deploy_sa_user" {
-  service_account_id = data.google_compute_default_service_account.default.name
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.default_compute_sa}"
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deploy.email}"
 }
@@ -147,6 +158,8 @@ resource "google_project_iam_custom_role" "deploy_vm_operator" {
     "compute.zoneOperations.get",
   ]
   stage = "GA"
+
+  depends_on = [google_project_service.app]
 }
 
 resource "google_project_iam_member" "deploy_vm_operator" {
