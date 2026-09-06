@@ -6,6 +6,7 @@ folder goes deeper on each topic.
 
 | Doc | Covers |
 | --- | --- |
+| [application.md](application.md) | The Next.js app in `web/`: how it runs, CI/CD, OWASP Top 10 mitigations |
 | [architecture.md](architecture.md) | The two-Terraform-root design, component list, request flow |
 | [deployment.md](deployment.md) | Step-by-step bootstrap → deploy, variables reference |
 | [operations.md](operations.md) | Day-to-day: starting/stopping the VM, checking service health, teardown |

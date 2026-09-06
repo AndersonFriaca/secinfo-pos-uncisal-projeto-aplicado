@@ -883,15 +883,16 @@ T29 → T30
 - Skill: NONE
 
 **Done when**:
-- [ ] Documents at least three OWASP Top 10:2025 categories, each naming the mitigation and citing a `path/to/file` that exists
-- [ ] Covers at minimum Identification and Authentication Failures (brute-force block, generic errors, password policy), Security Misconfiguration (the OWASP header set), and Broken Access Control (server-side session verification, CSRF)
-- [ ] Every cited path resolves — verified by iterating the paths and testing each
-- [ ] Adds a `docs/application.md` pointer so the app is discoverable from the docs index
-- [ ] Build gate passes
+- [x] Documents at least three OWASP Top 10:2025 categories, each naming the mitigation and citing a `path/to/file` that exists
+- [x] Covers at minimum Identification and Authentication Failures (brute-force block, generic errors, password policy), Security Misconfiguration (the OWASP header set), and Broken Access Control (server-side session verification, CSRF)
+- [x] Every cited path resolves — verified by iterating the paths and testing each
+- [x] Adds a `docs/application.md` pointer so the app is discoverable from the docs index
+- [x] Build gate passes
 
 **Tests**: none (documentation)
 **Gate**: Build
 **Commit**: `docs: document owasp top 10 mitigations with code references`
+**Status**: [x] Complete
 
 ---
 

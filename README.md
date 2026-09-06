@@ -48,15 +48,83 @@ plain `gcloud compute instances start/stop`.
 ## Repository layout
 
 ```
+web/               Next.js 16 application (SSR, TypeScript) — see docs/application.md
 infra/bootstrap/   Persistent Terraform root: state bucket, billing budget
 infra/             Main Terraform root: VPC, firewall, compute instance
 infra/scripts/     Startup script + PM2 config, rendered onto the VM
 ops/               Operator scripts (start/stop the VM with a static IP)
+.github/workflows/ CI (tests on PR) and deploy (on merge to main) pipelines
 docs/              Full documentation — start here
 .specs/            Planning history: requirements, design, tasks, verification report
 CLAUDE.md          Operating notes for AI agents working in this repo
 prd.md             Course requirements this project is graded against
 ```
+
+## Application security (OWASP Top 10)
+
+The Next.js app in `web/` implements active mitigations for four OWASP Top
+10:2025 categories. Each entry names the mechanism and the file that carries
+it.
+
+### Identification and Authentication Failures
+
+- **Brute-force IP block.** Five consecutive failed logins from one IP block
+  that IP for 60 seconds; the counter resets on success or when the block
+  expires. The decision logic (thresholds injected, clock injected) is in
+  [`web/lib/security/rate-limit-core.ts`](web/lib/security/rate-limit-core.ts);
+  the Firestore-backed store with an in-process cache that rejects an
+  already-blocked IP without a database round-trip is in
+  [`web/lib/security/rate-limit.ts`](web/lib/security/rate-limit.ts). It is
+  wired into the login route at
+  [`web/app/api/auth/login/route.ts`](web/app/api/auth/login/route.ts).
+- **Generic authentication errors.** Every upstream credential error collapses
+  to one message, so an unknown email and a wrong password are
+  indistinguishable — no account enumeration. See
+  [`web/lib/auth/identity-platform.ts`](web/lib/auth/identity-platform.ts).
+- **Password policy.** Minimum 12 characters with lower, upper, digit, and
+  symbol, enforced server-side before any Identity Platform call, in
+  [`web/lib/validation/credentials.ts`](web/lib/validation/credentials.ts).
+
+### Broken Access Control
+
+- **Server-side session verification on every protected request.** The
+  dashboard calls `getAuthenticatedUser`, which verifies the Firebase session
+  cookie with `checkRevoked: true` and requires a verified email — no cached
+  client-side flag. Logic in
+  [`web/lib/auth/session.ts`](web/lib/auth/session.ts); enforced at
+  [`web/app/dashboard/page.tsx`](web/app/dashboard/page.tsx).
+- **CSRF protection.** State-changing requests must present a CSRF token that
+  matches a `SameSite=Strict` cookie, compared in constant time, plus a
+  same-origin check on `Origin`/`Referer`. Token logic in
+  [`web/lib/security/csrf.ts`](web/lib/security/csrf.ts); enforcement in
+  [`web/proxy.ts`](web/proxy.ts).
+
+### Security Misconfiguration
+
+- **OWASP response-header set.** A nonce-based Content-Security-Policy (no
+  `unsafe-inline`/`unsafe-eval`), HSTS, `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`,
+  all three `Cross-Origin-*` headers, and `Cache-Control: no-store` on
+  sensitive responses. Built in
+  [`web/lib/security/headers.ts`](web/lib/security/headers.ts) and applied to
+  every request in [`web/proxy.ts`](web/proxy.ts).
+- **No version disclosure.** `poweredByHeader: false` in
+  [`web/next.config.ts`](web/next.config.ts) drops `X-Powered-By`;
+  `server_tokens off;` written by
+  [`infra/scripts/startup.sh.tpl`](infra/scripts/startup.sh.tpl) strips the
+  Nginx version from the `Server` header.
+
+### Cryptographic Failures
+
+- **Hardened session cookie.** The Firebase session cookie is set `HttpOnly`,
+  `Secure`, `SameSite=Strict`, `Path=/`, with a 12-hour lifetime, and CSRF
+  tokens use `crypto.getRandomValues` (≥ 32 bytes, never derived from the
+  session or a timestamp). See
+  [`web/lib/auth/session.ts`](web/lib/auth/session.ts) and
+  [`web/lib/security/csrf.ts`](web/lib/security/csrf.ts). HSTS
+  (`max-age=63072000; includeSubDomains`) is emitted from
+  [`web/lib/security/headers.ts`](web/lib/security/headers.ts), and Nginx
+  redirects all HTTP traffic to HTTPS.
 
 ## Agent notes
 
