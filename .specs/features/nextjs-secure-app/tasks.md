@@ -515,15 +515,16 @@ T13 → T14 → T15 → T16
 - Skill: NONE
 
 **Done when**:
-- [ ] Requires valid credentials or an existing unverified session before resending, so the endpoint cannot be used to spray mail at arbitrary addresses
-- [ ] Applies the `auth` rate-limit bucket; exceeding it returns 429 with `Retry-After`
-- [ ] Returns the same generic acknowledgement whether or not the address exists (no enumeration)
-- [ ] Unit tests cover: successful resend, rate-limited, and unknown address returning the identical acknowledgement
-- [ ] Quick gate passes
+- [x] Requires valid credentials or an existing unverified session before resending, so the endpoint cannot be used to spray mail at arbitrary addresses
+- [x] Applies the `auth` rate-limit bucket; exceeding it returns 429 with `Retry-After`
+- [x] Returns the same generic acknowledgement whether or not the address exists (no enumeration)
+- [x] Unit tests cover: successful resend, rate-limited, and unknown address returning the identical acknowledgement
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add resend verification route handler`
+**Status**: [x] Complete
 
 ---
 
