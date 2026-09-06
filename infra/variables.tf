@@ -37,12 +37,12 @@ variable "ssh_public_key_path" {
 
 variable "operator_ssh_cidrs" {
   type        = list(string)
-  default     = []
-  description = "CIDR ranges allowed to reach the VM on tcp:22 directly. Empty (default) = no public SSH; reach the VM only via 'gcloud compute ssh --tunnel-through-iap'. Operator-supplied in the gitignored terraform.tfvars."
+  default     = ["0.0.0.0/0"]
+  description = "CIDR ranges allowed to reach the VM on tcp:22. Default 0.0.0.0/0 so the evaluation board can connect; narrow to specific CIDRs (e.g. [\"203.0.113.4/32\"]) to harden. Regardless of source, :22 is key-only (password auth disabled) and protected by Fail2Ban (4 attempts / 24h). Must not be empty."
 
   validation {
-    condition     = alltrue([for c in var.operator_ssh_cidrs : can(cidrhost(c, 0))])
-    error_message = "every operator_ssh_cidrs entry must be a valid CIDR (e.g. \"203.0.113.4/32\")."
+    condition     = length(var.operator_ssh_cidrs) > 0 && alltrue([for c in var.operator_ssh_cidrs : can(cidrhost(c, 0))])
+    error_message = "operator_ssh_cidrs must be a non-empty list of valid CIDRs (e.g. [\"0.0.0.0/0\"] or [\"203.0.113.4/32\"])."
   }
 }
 

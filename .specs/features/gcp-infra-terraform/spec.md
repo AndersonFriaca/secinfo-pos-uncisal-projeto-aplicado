@@ -65,7 +65,7 @@ Explicitly excluded. Documented to prevent scope creep.
 
 1. WHEN `terraform apply` runs with a valid `project_id`, `region` = `us-east1`, `zone` = `us-east1-b`, and an SSH public key path THEN the system SHALL create exactly one `google_compute_instance` of machine type `e2-micro` running Ubuntu 24.04 LTS. <!-- event-driven -->
 2. The system SHALL define GCP firewall rules that allow ingress only on TCP ports 22, 80, and 443, with all other ports implicitly denied. <!-- ubiquitous -->
-   > Superseded for the app VM by `nextjs-secure-app` (AD-007): `:22` is IAP-range-only (`35.235.240.0/20`) by default; public `:22` is opt-in via `var.operator_ssh_cidrs`.
+   > Extended for the app VM by `nextjs-secure-app` (AD-007): an `allow-iap-ssh` rule (`tcp:22` from `35.235.240.0/20`) is added for the keyless CI deploy path. Public `:22` (`allow-ssh`) stays open to `var.operator_ssh_cidrs` (default `0.0.0.0/0`) for the evaluation board — key-only + Fail2Ban as required here.
 3. WHEN the instance boots THEN the system SHALL have SSH key-based login enabled via the public key injected through instance metadata, with `PasswordAuthentication no` set in `sshd_config`. <!-- event-driven -->
 4. IF `terraform apply` is run a second time with no configuration changes THEN the system SHALL report zero resource changes (idempotent plan). <!-- unwanted-behavior -->
 5. IF `project_id` or the SSH public key file path variable is missing or empty THEN Terraform SHALL fail validation (`terraform plan`/`apply`) with a descriptive error before attempting to create any resource. <!-- unwanted-behavior -->

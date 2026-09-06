@@ -42,9 +42,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Credential-free static checks. These protect the Amendment 2 hardening
-      # (R2 instance-scoped IAM, R3 opt-in public :22) from silently regressing —
-      # terraform fmt/validate cannot see IAM scope or firewall breadth.
+      # Credential-free static checks. These protect the deploy identity's
+      # least-privilege scope (Amendment 2 R2: instance-scoped IAM, no predefined
+      # project role, keyless deploy stays instance-scoped) from silently
+      # regressing — terraform fmt/validate cannot see IAM scope.
+      # Public :22 is intentionally open (PRD Eixo 1: key-only + Fail2Ban), so
+      # firewall breadth is not guarded here.
       - name: Deploy SA holds no predefined project role
         working-directory: ${{ github.workspace }}
         run: |
@@ -84,36 +87,6 @@ jobs:
             exit 1
           fi
 
-      - name: No firewall rule opens tcp:22 to 0.0.0.0/0
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          offenders=$(awk '
-            /resource "google_compute_firewall"/ { blk=$0; has22=0; hasany=0; next }
-            blk != "" {
-              if ($0 ~ /"22"/)        has22=1
-              if ($0 ~ /0\.0\.0\.0\/0/) hasany=1
-              if ($0 ~ /^}/) {
-                if (has22 && hasany) print blk
-                blk=""
-              }
-            }
-          ' infra/*.tf)
-          if [ -n "$offenders" ]; then
-            echo "::error::A google_compute_firewall rule allows tcp:22 from 0.0.0.0/0:"
-            echo "$offenders"
-            exit 1
-          fi
-          # The opt-in var must not default to (or be committed as) the whole internet.
-          if grep -A6 'variable "operator_ssh_cidrs"' infra/variables.tf | grep -qE '0\.0\.0\.0/0'; then
-            echo "::error::operator_ssh_cidrs default must not contain 0.0.0.0/0."
-            exit 1
-          fi
-          if grep -qE '^\s*operator_ssh_cidrs\s*=.*0\.0\.0\.0/0' terraform.tfvars.example; then
-            echo "::error::terraform.tfvars.example sets operator_ssh_cidrs to 0.0.0.0/0."
-            exit 1
-          fi
-
       - name: Keyless deploy keeps ssh key off project metadata
         working-directory: ${{ github.workspace }}
         run: |
@@ -126,11 +99,3 @@ jobs:
             exit 1
           fi
 
-      - name: allow_ssh firewall rule stays count-gated
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          if ! grep -A4 'resource "google_compute_firewall" "allow_ssh"' infra/firewall.tf | grep -qE '^\s*count\s*='; then
-            echo "::error::infra/firewall.tf allow_ssh must keep its 'count =' guard so public :22 stays opt-in."
-            exit 1
-          fi

@@ -98,7 +98,7 @@ Greenfield project — no existing Terraform, no existing scripts. Nothing to re
 - **Purpose**: Allow exactly TCP 22, 80, 443 from `0.0.0.0/0`; everything else denied by the network's implicit default-deny (custom VPCs have no implicit-allow rules, unlike `default`).
 - **Location**: `infra/firewall.tf`
 - **Resources**: `google_compute_firewall` × 3 (`allow-ssh`, `allow-http`, `allow-https`), each scoped with a `target_tags = ["web-server"]` so only the tagged instance is affected.
-- **Superseded for the app VM by `nextjs-secure-app` (AD-007)**: `:22` is IAP-range-only by default; public `:22` is opt-in via `var.operator_ssh_cidrs`, and an `allow-iap-ssh` rule is added — so the app VM now has 2–4 rules, not a fixed 3.
+- **Extended for the app VM by `nextjs-secure-app` (AD-007)**: an `allow-iap-ssh` rule (`35.235.240.0/20`) is added for the keyless CI deploy; `allow-ssh` now takes its `source_ranges` from `var.operator_ssh_cidrs` (default `0.0.0.0/0`). So the app VM has 4 firewall rules, not 3.
 - **Dependencies**: `network.tf`'s VPC self-link.
 - **Reuses**: n/a.
 
