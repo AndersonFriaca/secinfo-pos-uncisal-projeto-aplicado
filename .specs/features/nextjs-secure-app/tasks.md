@@ -574,15 +574,16 @@ T17 → T18 → T19 → T20 → T21
 - Skill: NONE
 
 **Done when**:
-- [ ] Returns 200 with the project name, a short description, and links to `/login` and `/signup`
-- [ ] Calls `await connection()` (or equivalent) to force dynamic rendering so the CSP nonce applies
-- [ ] An authenticated, verified visitor still gets 200, with the header link pointing at `/dashboard`
-- [ ] The rendered HTML contains no Firebase config object and no `NEXT_PUBLIC_` auth value
-- [ ] `npm run build` succeeds
+- [x] Returns 200 with the project name, a short description, and links to `/login` and `/signup`
+- [x] Calls `await connection()` (or equivalent) to force dynamic rendering so the CSP nonce applies
+- [x] An authenticated, verified visitor still gets 200, with the header link pointing at `/dashboard`
+- [x] The rendered HTML contains no Firebase config object and no `NEXT_PUBLIC_` auth value
+- [x] `npm run build` succeeds
 
 **Tests**: none (rendering shell; the auth decision it delegates to is unit-tested in T12)
 **Gate**: Build
 **Commit**: `feat(web): add public landing page`
+**Status**: [x] Complete
 
 ---
 
