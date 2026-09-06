@@ -94,6 +94,39 @@ describe("proxy — OWASP header set (SEC-12)", () => {
   });
 });
 
+describe("proxy — CSRF token cookie attributes (SEC-21)", () => {
+  it("seeds csrf_token as a Secure, SameSite=Strict, Path=/ cookie on first contact", async () => {
+    const res = await get(`${APP}/`);
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    expect(setCookie).toMatch(/(^|,\s*)csrf_token=[A-Za-z0-9_-]+/);
+    expect(setCookie).toContain("Secure");
+    expect(setCookie).toMatch(/SameSite=strict/i);
+    expect(setCookie).toContain("Path=/");
+    // Design: the token cookie is deliberately not HttpOnly so a server-rendered
+    // form can be re-hydrated client-side; the CSRF control is SameSite=Strict +
+    // Secure + the Origin/Referer check, not cookie opacity.
+    expect(setCookie).not.toContain("HttpOnly");
+
+    const seeded = res.cookies.get("csrf_token");
+    expect(seeded?.value).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(seeded?.secure).toBe(true);
+    expect(seeded?.sameSite).toBe("strict");
+    expect(seeded?.path).toBe("/");
+    expect(seeded?.httpOnly).toBeFalsy();
+  });
+
+  it("does not reseed csrf_token when the request already carries one", async () => {
+    const existing = generateCsrfToken();
+    const res = await proxy(
+      new NextRequest(new URL(`${APP}/`), {
+        method: "GET",
+        headers: { cookie: `csrf_token=${existing}` },
+      }),
+    );
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+});
+
 describe("proxy — no-store on sensitive paths (SEC-17)", () => {
   it("sets Cache-Control: no-store on a /dashboard response", async () => {
     const res = await get(`${APP}/dashboard`);
