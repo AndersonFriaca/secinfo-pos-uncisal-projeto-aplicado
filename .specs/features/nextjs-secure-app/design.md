@@ -30,7 +30,7 @@ graph TD
     Limiter --> FS[(Firestore)]
 
     GH[GitHub Actions] -->|WIF, no static key| GCP[gcloud: resolve IP, start VM]
-    GH -->|scp bundle + pm2 reload| VMBox[/opt/app on the VM/]
+    GH -->|scp bundle + pm2 reload over IAP tunnel, ephemeral SSH key| VMBox[/opt/app on the VM, owned by appsvc/]
 ```
 
 **Why the split matters:** `proxy.ts` runs on the **Edge runtime**, where `firebase-admin` and the Firestore SDK cannot run (they need Node APIs). So the proxy is limited to what Web Crypto and plain header work can do — headers, Origin checks, CSRF token comparison — and everything requiring the Admin SDK or Firestore (session verification, rate-limit counters) lives in Route Handlers and Server Components, which run on Node. This is a hard runtime boundary, not a preference.
@@ -71,7 +71,7 @@ graph TD
 | Identity Platform | Server-side REST over HTTPS with an API key held in `/opt/app/.env.production` (chmod 600), never in the repo or the bundle |
 | Firestore | Admin SDK from Route Handlers only, using Application Default Credentials from the VM's service account |
 | Nginx | Sets `X-Forwarded-For`; the app reads its left-most entry for client IP (SEC-06) |
-| GitHub Actions | WIF → short-lived GCP token → `gcloud` for IP resolution and VM start; SSH key from secrets for the file transfer |
+| GitHub Actions | WIF → short-lived GCP token → `gcloud` for IP resolution, VM start, and `compute scp`/`ssh --tunnel-through-iap` for the file transfer and remote commands. gcloud mints an ephemeral IAM-scoped SSH key from the deploy SA identity — no key stored anywhere. Remote file ops run under `sudo` (ephemeral login user in `google-sudoers`) and hand ownership to `appsvc`. |
 
 ---
 
@@ -191,16 +191,16 @@ Route protection is **not** delegated to `proxy.ts` — the Admin SDK cannot run
 └── ecosystem.config.js
 ```
 
-PM2 runs `node current/server.js` with `PORT=3000`, `NODE_ENV=production`, and `--env-file` pointed at `.env.production`.
+PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_ENV=production`, and `--env-file` pointed at `.env.production`. `/opt/app` and every `releases/<sha>` are owned by `appsvc`; the deploy writes them with `sudo install -o appsvc`.
 
 ### GitHub Actions workflows
 
 | Workflow | Trigger | Steps |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | `pull_request` → `main` | checkout → setup-node 24 → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` (TEST-02, TEST-03) |
-| `.github/workflows/deploy.yml` | `push` → `main` | `npm ci` → test → `next build` → `google-github-actions/auth` (WIF) → resolve IP / start VM if `TERMINATED` → rsync bundle → write `.env.production` from secrets → `pm2 reload` → poll `https://<ip>/` for 200, 2-minute timeout (CICD-01..08) |
+| `.github/workflows/deploy.yml` | `push` → `main` | `npm ci` → test → `next build` → `google-github-actions/auth` (WIF) → resolve IP / start VM if `TERMINATED` → `gcloud compute scp --tunnel-through-iap` bundle → copy `.env.production` from secrets over the tunnel (`install -m 600 -o appsvc`) → `pm2 reload` as `appsvc` → poll `https://<ip>/` for 200, 2-minute timeout (CICD-01..08) |
 
-**Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `GCP_PROJECT_ID`, `GCP_ZONE`, `VM_SSH_PRIVATE_KEY`, `VM_SSH_USER`, `IDENTITY_PLATFORM_API_KEY`.
+**Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`. No SSH key or SSH-user secret — VM access is entirely through the WIF-federated deploy SA over an IAP tunnel.
 
 ### Terraform additions — `infra/app.tf`
 
@@ -210,7 +210,8 @@ PM2 runs `node current/server.js` with `PORT=3000`, `NODE_ENV=production`, and `
 | `google_identity_platform_config` | `sign_in.email.enabled = true`, `password_required = true` (TF-02) |
 | `google_firestore_database` | Native mode, `location_id = "us-east1"` (TF-03) |
 | `google_iam_workload_identity_pool` + `..._provider` | GitHub OIDC (`issuer_uri = "https://token.actions.githubusercontent.com"`), `attribute_mapping` for `google.subject`/`attribute.repository`/`attribute.repository_owner`, and an `attribute_condition` restricting to this repository (TF-04) |
-| `google_service_account` + `google_service_account_iam_member` | Deploy SA bound with `roles/iam.workloadIdentityUser` to the `principalSet://` for this repo; project roles limited to `roles/compute.instanceAdmin.v1` and `roles/iam.serviceAccountUser` (TF-05) |
+| `google_service_account` + `google_service_account_iam_member` | Deploy SA bound with `roles/iam.workloadIdentityUser` to the `principalSet://` for this repo; project roles limited to `roles/compute.instanceAdmin.v1` (start VM + publish the ephemeral SSH key to metadata), `roles/iam.serviceAccountUser`, and `roles/iap.tunnelResourceAccessor` (open the IAP SSH tunnel) (TF-05) |
+| `google_compute_firewall` `allow-iap-ssh` + `iap.googleapis.com` service | `tcp:22` from the IAP range `35.235.240.0/20` to `web-server`-tagged instances — the ingress path for the keyless deploy. The public `allow-ssh` rule stays for the operator. |
 | `outputs.tf` additions | WIF provider resource name, deploy SA email (TF-06) |
 
 ---
@@ -269,6 +270,7 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 | `X-Forwarded-For` is client-controllable in principle | `lib/security/rate-limit.ts` | A spoofed header could let an attacker rotate "IPs" and dodge the block | Nginx is the only ingress and overwrites the header for direct traffic; documented as a known limitation rather than claimed as airtight |
 | Firestore free tier is 20k writes/day | `lib/security/rate-limit.ts` | A sustained attack could exhaust it and (fail-closed) take login down | L1 memory cache short-circuits already-blocked IPs before any Firestore call (SEC-07) — the write cost of an attack is bounded by the number of *distinct* IPs, not the number of attempts |
 | In-memory L1 resets on every deploy/restart | `lib/security/rate-limit.ts` | A block can be "forgotten" by the fast path right after a deploy | Firestore remains the source of truth; a reset L1 only costs one extra read to re-learn the block. No security property is lost |
+| Ephemeral SSH key / sshd propagation lag on a just-started VM | `.github/workflows/deploy.yml` | The first `gcloud compute ssh --tunnel-through-iap` after a VM start can fail for ~30-60s while the key reaches instance metadata and the guest agent applies it | The deploy's first remote call retries in a `for i in $(seq 1 12); do ... sleep 5; done` loop before the bundle transfer |
 | Verification email deliverability is Google's default sender | Identity Platform | Mail may land in spam, blocking signup end-to-end | Out of our control without a custom SMTP domain (explicitly out of scope); `/verify-email` offers a resend, and the operator can flip `emailVerified` in the console if a demo is blocked |
 
 ---
@@ -286,7 +288,9 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 | Build location | GitHub Actions, deploying a `standalone` bundle | 1 GB RAM on the VM makes on-host builds slow and OOM-prone |
 | Release layout | `releases/<sha>` + `current` symlink | Atomic flip, trivial rollback, no window where the served directory is half-written |
 | CI → GCP auth | Workload Identity Federation with a repository-scoped `attribute_condition` | No long-lived key in GitHub; without the condition any repo could assume the SA |
-| Deploy SA permissions | `roles/compute.instanceAdmin.v1` + `roles/iam.serviceAccountUser` only | Least privilege — enough to read the IP and start the VM, nothing else |
+| CI → VM auth | `gcloud compute ssh`/`scp --tunnel-through-iap`; gcloud mints an ephemeral, IAM-scoped SSH key from the WIF-federated deploy SA identity | No stored SSH key or SSH-user secret. No OS Login toggle needed — the guest agent lands ephemeral keys in `google-sudoers`. IAP tunnel means no need to widen public `:22` |
+| App runtime user on the VM | Dedicated locked `appsvc` (hardcoded constant), owns `/opt/app`, runs PM2 | CI connects as its own ephemeral IAP login user, not a fixed operator; decoupling the runtime user from any human keeps the deploy identity-agnostic |
+| Deploy SA permissions | `roles/compute.instanceAdmin.v1` + `roles/iam.serviceAccountUser` + `roles/iap.tunnelResourceAccessor` | Least privilege — start the VM, publish the ephemeral SSH key to metadata, open the IAP tunnel; never `roles/owner`/`roles/editor` |
 | Test runner | Vitest | Native TypeScript/ESM, fast, and the modules under test are pure functions with injected clocks — no framework bootstrapping needed |
 | Clock handling in tests | `now` injected as a parameter | Deterministic assertions at the 5th failure and the 60-second boundary, with no `sleep` in the suite |
 

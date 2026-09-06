@@ -732,7 +732,8 @@ T22 → T23 → T24
 **Done when**:
 - [x] `google_iam_workload_identity_pool` + `google_iam_workload_identity_pool_provider` with `oidc.issuer_uri = "https://token.actions.githubusercontent.com"` and `attribute_mapping` covering `google.subject`, `attribute.repository`, and `attribute.repository_owner`
 - [x] An `attribute_condition` restricts the provider to this repository — without it any GitHub repo could assume the service account
-- [x] A deploy service account is bound with `roles/iam.workloadIdentityUser` via a `principalSet://` member scoped to this repository; project roles are exactly `roles/compute.instanceAdmin.v1` and `roles/iam.serviceAccountUser` — never `roles/owner` or `roles/editor`
+- [x] A deploy service account is bound with `roles/iam.workloadIdentityUser` via a `principalSet://` member scoped to this repository; project roles are exactly `roles/compute.instanceAdmin.v1`, `roles/iam.serviceAccountUser`, and `roles/iap.tunnelResourceAccessor` (keyless IAP SSH tunnel to the VM) — never `roles/owner` or `roles/editor`
+- [x] `iap.googleapis.com` is enabled (in `infra/app.tf`) and an `allow-iap-ssh` firewall rule opens `tcp:22` from `35.235.240.0/20` so the keyless deploy can reach sshd
 - [x] **Verify the exact `principalSet://` member format and whether `attribute_condition` is provider-required against the current Terraform provider documentation before applying** — the design flags this as easy to get subtly wrong, and a wrong member fails silently
 - [x] Outputs expose the WIF provider resource name and the deploy service-account email for copying into GitHub secrets
 - [x] Terraform gate passes
@@ -755,7 +756,7 @@ T25 → T26
 
 #### T25: Install Node.js 24 and prepare the app directory
 
-**What**: Replace the distribution's Node 18 with Node 24 LTS and make `/opt/app` writable by the deploy user.
+**What**: Replace the distribution's Node 18 with Node 24 LTS, create the dedicated locked `appsvc` user, and make `/opt/app` owned by `appsvc`.
 **Where**: `infra/scripts/startup.sh.tpl`
 **Depends on**: None
 **Reuses**: The existing idempotency-guard style already used by every stage in this script
@@ -768,8 +769,8 @@ T25 → T26
 **Done when**:
 - [x] Node.js 24 LTS is installed from NodeSource instead of the `apt` `nodejs` package, guarded so a re-run is a no-op
 - [x] The guard checks the **installed major version** (`-lt` the required major), not merely that `node` exists — a pre-existing Node 18 must be upgraded, not skipped
-- [x] PM2 install and `pm2 startup` registration still work after the change
-- [x] `/opt/app` exists and is owned by the deploy user so the pipeline writes without `sudo`
+- [x] PM2 install and `pm2 startup` registration still work after the change, retargeted to the dedicated locked `appsvc` user (`pm2-appsvc` unit, generated via `runuser -u appsvc`)
+- [x] A dedicated locked `appsvc` system user is created idempotently; `/opt/app` exists and is owned by `appsvc` (not `${ssh_username}`), which PM2 runs as
 - [x] Shell gate passes
 - [x] A note records that this is verified live only after a VM rebuild (`node --version` ≥ v24)
 
@@ -850,11 +851,12 @@ T27 → T28
 **Done when**:
 - [x] Triggers on `push` to `main`; runs the tests before building
 - [x] Authenticates with `google-github-actions/auth` using the WIF provider and service account from secrets — the file contains **no** service-account JSON key and no `credentials_json`
+- [x] Reaches the VM entirely over an IAP tunnel (`gcloud compute scp`/`ssh --tunnel-through-iap`) with **no stored SSH key and no `VM_SSH_*` secret**; there is no `Configure SSH` step
 - [x] Resolves the VM's external IP with `gcloud compute instances describe`; if the instance is `TERMINATED`, reserves an IP, attaches it, and starts the instance before deploying
-- [x] Copies the `standalone` bundle into `/opt/app/releases/<sha>` and flips the `current` symlink atomically
-- [x] Writes `/opt/app/.env.production` from GitHub secrets with `chmod 600`
-- [x] Reloads PM2, then polls `https://<ip>/` until HTTP 200, failing the job after 2 minutes
-- [x] Every credential comes from `secrets.*`; `grep` finds no literal key, token, or project ID in the file
+- [x] Copies the `standalone` bundle into `/opt/app/releases/<sha>` (`sudo install -o appsvc`) and flips the `current` symlink atomically; the first remote call retries while sshd/key propagation catches up
+- [x] Copies `/opt/app/.env.production` from GitHub secrets over the tunnel with `install -m 600 -o appsvc` — the secret value never lands on a remote command line
+- [x] Reloads PM2 as `appsvc`, then polls `https://<ip>/` until HTTP 200, failing the job after 2 minutes
+- [x] Remaining secrets are exactly `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`; `grep` finds no literal key, token, or project ID in the file
 - [x] Workflow gate passes
 
 **Tests**: none (CI config; live execution is deferred to the operator's first merge)

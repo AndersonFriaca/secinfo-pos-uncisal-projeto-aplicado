@@ -22,11 +22,15 @@ no API key, project ID, or Firebase config reaches the client bundle.
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | pull request to `main` | `npm ci`, lint, typecheck, unit tests |
-| `.github/workflows/deploy.yml` | push to `main` | tests, standalone build, keyless GCP auth (Workload Identity Federation), resolve/start the VM, ship the bundle, write `/opt/app/.env.production`, reload PM2, poll `https://<ip>/` for HTTP 200 |
+| `.github/workflows/deploy.yml` | push to `main` | tests, standalone build, keyless GCP auth (Workload Identity Federation), resolve/start the VM, ship the bundle and run remote commands over an IAP tunnel (`gcloud compute scp/ssh --tunnel-through-iap`), write `/opt/app/.env.production`, reload PM2 as `appsvc`, poll `https://<ip>/` for HTTP 200 |
 
-The deploy workflow holds no long-lived GCP key: it authenticates through the
-Workload Identity pool provisioned in `infra/wif.tf`. Every credential comes
-from GitHub Actions secrets.
+The deploy workflow holds no long-lived GCP key **and no SSH key**: it
+authenticates through the Workload Identity pool provisioned in `infra/wif.tf`,
+and reaches the VM over an IAP tunnel where `gcloud` mints an ephemeral,
+IAM-scoped SSH key from the federated deploy service account. The app runs on
+the VM as a dedicated locked `appsvc` user. Every credential comes from GitHub
+Actions secrets: `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_REGION`, `GCP_WIF_PROVIDER`,
+`GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`.
 
 ## OWASP Top 10 mitigations
 

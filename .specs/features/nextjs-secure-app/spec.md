@@ -233,16 +233,16 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 
 **Acceptance Criteria**:
 
-1. WHEN a push lands on `main` THEN GitHub Actions SHALL build the app (`next build` with `output: "standalone"`) and deploy the resulting bundle to the VM. <!-- event-driven -->
+1. WHEN a push lands on `main` THEN GitHub Actions SHALL build the app (`next build` with `output: "standalone"`) and deploy the resulting bundle to the VM over an IAP tunnel (no SSH key file). <!-- event-driven -->
 2. The workflow SHALL authenticate to GCP with Workload Identity Federation and SHALL NOT contain or consume a service-account JSON key. <!-- ubiquitous -->
 3. WHEN the workflow needs the deploy target THEN it SHALL resolve the VM's current external IP with `gcloud compute instances describe` rather than a hardcoded address. <!-- event-driven -->
 4. IF the VM is `TERMINATED` at deploy time THEN the workflow SHALL reserve a static IP, attach it, and start the instance before deploying — mirroring `ops/vm-start.sh`. <!-- unwanted-behavior -->
-5. WHEN the bundle reaches the VM THEN the workflow SHALL restart the app through PM2 and SHALL confirm the deployment by polling `https://<ip>/` until it returns HTTP 200, failing the job after 2 minutes without a 200. <!-- event-driven -->
-6. The workflow SHALL read every credential (WIF provider, service-account email, SSH private key, Identity Platform API key, Admin SDK credentials) from GitHub Actions secrets — never from a file in the repository. <!-- ubiquitous -->
+5. WHEN the bundle reaches the VM THEN the workflow SHALL transfer it and run remote commands over an IAP tunnel (`gcloud compute scp`/`ssh --tunnel-through-iap`) authenticated by the WIF-federated deploy service account — with no SSH key file written — then restart the app through PM2 and confirm the deployment by polling `https://<ip>/` until it returns HTTP 200, failing the job after 2 minutes without a 200. <!-- event-driven -->
+6. VM authentication SHALL go entirely through the WIF-federated deploy service account over an IAP tunnel, with **no SSH key material stored as a GitHub secret or committed to the repository**; the workflow SHALL read every other credential (WIF provider, service-account email, Identity Platform API key, Admin SDK credentials) from GitHub Actions secrets — never from a file in the repository. <!-- ubiquitous -->
 7. The system SHALL write the application's runtime environment file on the VM (outside the repository, e.g. `/opt/app/.env.production`) with `chmod 600`, populated from GitHub secrets at deploy time. <!-- ubiquitous -->
 8. The repository SHALL contain no `.env` file, no service-account key, and no secret value — enforced by `.gitignore` and verifiable with `git ls-files`. <!-- ubiquitous -->
 
-**Independent Test**: A merge to `main` produces a green Actions run whose logs show WIF authentication (no key file), an IP resolved dynamically, a PM2 restart, and a 200 from the health poll; `git ls-files | grep -E '\.env$|credentials.*\.json'` returns nothing; `curl -s https://<ip>/` serves the newly built page.
+**Independent Test**: A merge to `main` produces a green Actions run whose logs show WIF authentication (no key file), an IP resolved dynamically, `gcloud compute scp/ssh --tunnel-through-iap` reaching the VM with no SSH private key in the workspace, a PM2 restart, and a 200 from the health poll; the workflow file contains no `VM_SSH_*` secret reference; `git ls-files | grep -E '\.env$|credentials.*\.json'` returns nothing; `curl -s https://<ip>/` serves the newly built page.
 
 ---
 
@@ -277,10 +277,10 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 1. The system SHALL install Node.js 24 LTS on the VM from the NodeSource repository instead of the distribution's `nodejs` package, idempotently, in `infra/scripts/startup.sh.tpl`. <!-- ubiquitous -->
 2. WHEN the startup script completes THEN `node --version` on the VM SHALL report a major version ≥ 24 (which satisfies `next@16`'s `engines.node >= 20.9.0`). <!-- event-driven -->
 3. The system SHALL keep PM2 installed and registered for boot survival after the Node.js change, with the existing `pm2 startup` behaviour unchanged. <!-- ubiquitous -->
-4. The system SHALL create `/opt/app` owned by the deploy user so the pipeline can write the bundle without `sudo`. <!-- ubiquitous -->
+4. The system SHALL create a dedicated locked service user `appsvc` and create `/opt/app` owned by `appsvc`; the keyless IAP deploy connects as its own ephemeral sudo-capable user and hands each release to `appsvc`. <!-- ubiquitous -->
 5. The system SHALL set `server_tokens off;` in the Nginx configuration so the `Server` response header discloses no version, satisfying the OWASP header story's version-disclosure requirement at the proxy layer. <!-- ubiquitous -->
 
-**Independent Test**: On a freshly booted VM, `node --version` prints `v24.x`; `pm2 list` still works and `systemctl status pm2-<user>` is active; `test -w /opt/app` succeeds as the deploy user; `curl -sI https://<ip>/ | grep -i '^server:'` shows `nginx` with no version number.
+**Independent Test**: On a freshly booted VM, `node --version` prints `v24.x`; `pm2 list` still works and `systemctl status pm2-appsvc` is active; `test -w /opt/app` succeeds as `appsvc`; `curl -sI https://<ip>/ | grep -i '^server:'` shows `nginx` with no version number.
 
 ---
 
