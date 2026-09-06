@@ -28,6 +28,12 @@ apply` on `infra/` while the VM is up will swap it back to ephemeral
 (harmless, but the IP changes). Prefer stopping the VM with `vm-stop.sh`
 before running Terraform changes against `infra/`.
 
+Running `terraform apply` with `operator_ssh_cidrs` unset (the default)
+deletes any existing public `allow-ssh` rule and drops direct operator
+SSH. Afterwards reach the VM with `gcloud compute ssh --tunnel-through-iap`
+(the caller needs `roles/iap.tunnelResourceAccessor`), or set
+`operator_ssh_cidrs` to your CIDR before applying.
+
 ## Health checks
 
 SSH in. Unless the caller's IP is in `operator_ssh_cidrs`, there is no

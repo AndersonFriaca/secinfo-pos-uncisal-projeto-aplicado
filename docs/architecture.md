@@ -38,7 +38,8 @@ everything billable, keep the free stuff" actually work.
 Internet
    │
    ▼
-Firewall (22 / 80 / 443 only, custom VPC — never GCP's `default` network)
+Firewall (custom VPC, never GCP's `default`): :22 from the IAP range only
+   │          by default (public :22 opt-in via var.operator_ssh_cidrs), plus :80 and :443
    │
    ▼
 e2-micro instance (Ubuntu 24.04, Shielded VM)
