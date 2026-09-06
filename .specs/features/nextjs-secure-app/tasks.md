@@ -431,17 +431,18 @@ T13 → T14 → T15 → T16
 - Skill: NONE
 
 **Done when**:
-- [ ] Rate-limits the `auth` bucket first, then validates, then calls Identity Platform
-- [ ] A valid submission returns 303 to `/verify-email` and triggers `sendVerificationEmail`
-- [ ] A weak password returns 400 naming the failed rule and **never** calls Identity Platform (assert the mock was not invoked)
-- [ ] An already-registered email returns the same generic 400 body as any other signup rejection — byte-identical
-- [ ] The response carries `Cache-Control: no-store`
-- [ ] Unit tests cover: success, each password rule failure, malformed email, duplicate email, and rate-limited (429)
-- [ ] Quick gate passes
+- [x] Rate-limits the `auth` bucket first, then validates, then calls Identity Platform
+- [x] A valid submission returns 303 to `/verify-email` and triggers `sendVerificationEmail`
+- [x] A weak password returns 400 naming the failed rule and **never** calls Identity Platform (assert the mock was not invoked)
+- [x] An already-registered email returns the same generic 400 body as any other signup rejection — byte-identical
+- [x] The response carries `Cache-Control: no-store`
+- [x] Unit tests cover: success, each password rule failure, malformed email, duplicate email, and rate-limited (429)
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add signup route handler`
+**Status**: [x] Complete
 
 ---
 
