@@ -909,15 +909,16 @@ T29 → T30
 - Skill: NONE
 
 **Done when**:
-- [ ] `cd web && npm run lint && npm run typecheck && npm test && npm run build` all pass, with the total test count recorded
-- [ ] `terraform fmt -check -recursive infra`, `terraform -chdir=infra validate`, and `terraform -chdir=infra/bootstrap validate` pass
-- [ ] `bash -n` on the de-templated startup script passes; both workflow YAML files parse
-- [ ] `git status --porcelain` is clean and `git ls-files` contains no `.env`, key, or project identifier
-- [ ] A handoff note lists the operator's remaining live steps: create the GitHub repo and secrets, `terraform apply` the new resources, rebuild the VM (Node 22), merge to `main` to trigger the first deploy, then run every "Independent Test" from `spec.md`
+- [x] `cd web && npm run lint && npm run typecheck && npm test && npm run build` all pass — **134 tests** across 13 test files
+- [x] `terraform fmt -check -recursive infra`, `terraform -chdir=infra validate`, and `terraform -chdir=infra/bootstrap validate` pass (T25's `$${NODE_MAJOR_REQUIRED}` templatefile escape was fixed here — it was caught only by `terraform validate`, not by the Shell gate)
+- [x] `bash -n` on the de-templated startup script passes; both workflow YAML files parse
+- [x] `git status --porcelain` is clean and `git ls-files` contains no `.env`, key, or project identifier
+- [x] A handoff note lists the operator's remaining live steps — see `.specs/STATE.md` `## Handoff`
 
 **Tests**: none (this task's gate is the verification)
 **Gate**: Build
 **Commit**: `chore(web): final validation pass`
+**Status**: [x] Complete
 
 ---
 

@@ -24,7 +24,7 @@ installed_node_major() {
   command -v node >/dev/null 2>&1 && node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/' || echo 0
 }
 if [ "$(installed_node_major)" != "$NODE_MAJOR_REQUIRED" ]; then
-  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR_REQUIRED}.x" | bash -
+  curl -fsSL "https://deb.nodesource.com/setup_$${NODE_MAJOR_REQUIRED}.x" | bash -
   apt-get install -y nodejs
 fi
 

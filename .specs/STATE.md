@@ -104,11 +104,18 @@ code, and only surfaces at deploy time.
 ## Handoff
 
 **Feature**: `nextjs-secure-app`
-**Phase**: Planning complete (Specify → Design → Tasks all approved). Execute deliberately not started — the user chose to plan now and implement later.
-**Completed**: `spec.md` (75 requirements, validator clean), `design.md`, `tasks.md` (30 tasks across 11 phases, validator clean — 0 errors).
-**In progress**: nothing — no application code exists yet; `web/` has not been created.
-**Next step**: run Execute. Dispatch batch 1 (Phases 1-2: T1-T6 — scaffold, Vitest, shadcn, then the pure security primitives). Per the confirmed decisions in `tasks.md`: sub-agent batches, `coding-guidelines` on code tasks, `react-best-practices` on Phases 4 and 7, `docs-writer` on T29.
-**Blockers**: none for local implementation. Live verification needs the operator: a GitHub repo with the secrets configured, `terraform apply` for the new GCP resources, and a VM rebuild to pick up Node 22.
-**Watch out for**: T24 (Workload Identity Federation) must verify the `principalSet://` member format against current provider docs before applying — a wrong member fails silently. T25's Node guard must check the installed *major version*, not merely that `node` exists, or a pre-existing Node 18 will be skipped rather than upgraded.
-**Uncommitted files**: `.specs/features/nextjs-secure-app/`, `.specs/STATE.md`.
-**Branch**: `master`.
+**Phase**: Execute complete through T30 (all 30 tasks committed across 11 phases). Independent Verifier pending — the orchestrator dispatches it next.
+**Completed**: full `web/` Next.js 16 app (134 unit tests passing; lint, typecheck, build clean); `infra/app.tf` / `infra/firestore.tf` / `infra/wif.tf` (terraform fmt + validate clean on `infra/` and `infra/bootstrap/`); `infra/scripts/startup.sh.tpl` (Node 22 LTS from NodeSource, `/opt/app` chowned, `server_tokens off`); `infra/scripts/ecosystem.config.js` (standalone `node current/server.js`); `.github/workflows/ci.yml` (PR test gate) and `.github/workflows/deploy.yml` (WIF keyless deploy). README documents four OWASP Top 10:2025 categories with verified file paths; `docs/application.md` added.
+**Final gate (T30)**: `npm run lint && npm run typecheck && npm test && npm run build` all pass — 134 tests / 13 files. `terraform fmt -check -recursive infra`, `terraform -chdir=infra validate`, `terraform -chdir=infra/bootstrap validate` all pass. `bash -n` on the de-templated startup script passes; both workflow YAMLs parse. `git status --porcelain` clean; `git ls-files` carries no `.env`, key, or project identifier.
+**In progress**: nothing.
+**Next step**: run the independent Verifier over the feature diff (commits `5ed6e94^..HEAD` on `main` roughly; the feature's own range), then hand to the operator.
+
+### Operator live steps (deferred — need an authenticated GCP account + a running VM)
+
+1. **GitHub repo + secrets.** Push to the GitHub repo and configure Actions secrets: `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `VM_SSH_PRIVATE_KEY`, `VM_SSH_USER`, `IDENTITY_PLATFORM_API_KEY`. The WIF provider name and deploy-SA email come from `terraform output` after step 2.
+2. **`terraform apply` the new resources.** In `infra/`: applies `google_project_service` (identitytoolkit, firestore, iamcredentials), `google_identity_platform_config`, `google_firestore_database` (Native, `us-east1`), the Workload Identity pool/provider, and the deploy service account. Verify the `principalSet://` member resolved to this repo.
+3. **Rebuild the VM for Node 22.** The updated `startup.sh.tpl` only takes effect on a fresh boot / instance recreation. After it runs, confirm `node --version` ≥ v20.9.0, `pm2 list` works, `test -w /opt/app` as the deploy user, and `curl -sI https://<ip>/ | grep -i '^server:'` shows no version.
+4. **Merge to `main`** to trigger `deploy.yml`: WIF auth (no key), dynamic IP resolution, bundle to `/opt/app/releases/<sha>`, `current` symlink flip, `.env.production` written chmod 600, PM2 reload, health poll to HTTP 200.
+5. **Run every "Independent Test" in `spec.md`** against the live VM: landing page 200 + no `NEXT_PUBLIC_`/Firebase config in HTML; signup weak/strong password; login byte-identical failures + `Set-Cookie` attributes + no client-bundle Identity Platform reference; dashboard 303 without cookie / 200 with / 303 after logout-replay; six failed logins → 429 `Retry-After: 60` with the 6th never reaching Identity Platform; `curl -sI` full OWASP header set + absence checks + foreign-`Origin` 403; PR shows a red check on a broken assertion; merge produces a green deploy with a dynamic IP and a 200 health poll; `terraform destroy` then `apply` round-trips.
+
+**Branch**: `main`.
