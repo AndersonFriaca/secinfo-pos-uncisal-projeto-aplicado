@@ -730,17 +730,20 @@ T22 → T23 → T24
 - Skill: NONE
 
 **Done when**:
-- [ ] `google_iam_workload_identity_pool` + `google_iam_workload_identity_pool_provider` with `oidc.issuer_uri = "https://token.actions.githubusercontent.com"` and `attribute_mapping` covering `google.subject`, `attribute.repository`, and `attribute.repository_owner`
-- [ ] An `attribute_condition` restricts the provider to this repository — without it any GitHub repo could assume the service account
-- [ ] A deploy service account is bound with `roles/iam.workloadIdentityUser` via a `principalSet://` member scoped to this repository; project roles are exactly `roles/compute.instanceAdmin.v1` and `roles/iam.serviceAccountUser` — never `roles/owner` or `roles/editor`
-- [ ] **Verify the exact `principalSet://` member format and whether `attribute_condition` is provider-required against the current Terraform provider documentation before applying** — the design flags this as easy to get subtly wrong, and a wrong member fails silently
-- [ ] Outputs expose the WIF provider resource name and the deploy service-account email for copying into GitHub secrets
-- [ ] Terraform gate passes
-- [ ] No credential value is written into any committed file
+- [x] `google_iam_workload_identity_pool` + `google_iam_workload_identity_pool_provider` with `oidc.issuer_uri = "https://token.actions.githubusercontent.com"` and `attribute_mapping` covering `google.subject`, `attribute.repository`, and `attribute.repository_owner`
+- [x] An `attribute_condition` restricts the provider to this repository — without it any GitHub repo could assume the service account
+- [x] A deploy service account is bound with `roles/iam.workloadIdentityUser` via a `principalSet://` member scoped to this repository; project roles are exactly `roles/compute.instanceAdmin.v1` and `roles/iam.serviceAccountUser` — never `roles/owner` or `roles/editor`
+- [x] **Verify the exact `principalSet://` member format and whether `attribute_condition` is provider-required against the current Terraform provider documentation before applying** — the design flags this as easy to get subtly wrong, and a wrong member fails silently
+- [x] Outputs expose the WIF provider resource name and the deploy service-account email for copying into GitHub secrets
+- [x] Terraform gate passes
+- [x] No credential value is written into any committed file
 
 **Tests**: none (Terraform config layer)
 **Gate**: Terraform
 **Commit**: `feat(infra): add workload identity federation for github actions`
+**Status**: [x] Complete
+
+**Verification note**: `principalSet://` member format confirmed against `google-github-actions/auth` README — `principalSet://iam.googleapis.com/${POOL_NAME}/attribute.repository/${OWNER}/${REPO}`, where `${POOL_NAME}` is the full pool resource name exported as `google_iam_workload_identity_pool.github.name`. `attribute_condition` is not enforced by the provider schema (hashicorp/google 5.45.2) but is required in practice — GCP rejects a GitHub OIDC provider mapping `google.subject` without one, and it is the primary guard against any repository entering the pool. Restricted to `assertion.repository_owner`; the per-repo `principalSet` member narrows impersonation to the exact repo. `attribute_condition` provider-required: NO; practically required: YES.
 
 ---
 

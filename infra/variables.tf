@@ -34,3 +34,13 @@ variable "ssh_public_key_path" {
     error_message = "ssh_public_key_path must point to an existing file."
   }
 }
+
+variable "github_repository" {
+  type        = string
+  description = "GitHub repository allowed to deploy via Workload Identity Federation, in \"owner/repo\" form. No default: operator-supplied in the gitignored terraform.tfvars (identifier, not published)."
+
+  validation {
+    condition     = can(regex("^[^/]+/[^/]+$", var.github_repository))
+    error_message = "github_repository must be in \"owner/repo\" form."
+  }
+}
