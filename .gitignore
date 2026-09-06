@@ -13,3 +13,9 @@ credentials*.json
 .terraform/
 backend.hcl
 !backend.hcl.example
+
+# Local AI-agent tooling — kept on disk, never committed.
+# .github/workflows is intentionally NOT ignored: CI/CD lives there.
+.claude/
+.agents/
+.github/skills/
