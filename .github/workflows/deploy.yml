@@ -94,62 +94,70 @@ jobs:
             --format='value(networkInterfaces[0].accessConfigs[0].natIP)')"
           echo "ip=$IP" >> "$GITHUB_OUTPUT"
 
-      - name: Configure SSH
+      - name: Ship the bundle over an IAP tunnel and flip the current symlink
         env:
-          SSH_KEY: ${{ secrets.VM_SSH_PRIVATE_KEY }}
-          IP: ${{ steps.vm.outputs.ip }}
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          for i in $(seq 1 12); do
-            ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts 2>/dev/null && break
-            sleep 5
-          done
-
-      - name: Ship the bundle and flip the current symlink
-        env:
-          IP: ${{ steps.vm.outputs.ip }}
-          SSH_USER: ${{ secrets.VM_SSH_USER }}
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          ZONE: ${{ secrets.GCP_ZONE }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          TARGET="$SSH_USER@$IP"
-          SSH="ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=yes $TARGET"
-          scp -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes \
-            "$GITHUB_WORKSPACE/release.tgz" "$TARGET:/tmp/release-$SHA.tgz"
+          # `gcloud compute ssh/scp --tunnel-through-iap` mints an ephemeral,
+          # IAM-scoped SSH key from the WIF-federated deploy SA and publishes it
+          # into instance metadata — nothing is stored in the repo or in a
+          # secret. The guest agent lands the ephemeral login user in
+          # google-sudoers, so file ops under /opt/app use sudo.
+          GCLOUD="gcloud compute --quiet --project=$PROJECT"
+          SSH="$GCLOUD ssh app-vm --zone=$ZONE --tunnel-through-iap --command"
+          # sshd + key propagation can lag ~30-60s on a just-started VM.
+          for i in $(seq 1 12); do
+            $SSH "true" && break
+            echo "waiting for sshd over IAP (attempt $i)..."
+            sleep 5
+          done
+          $GCLOUD scp --zone="$ZONE" --tunnel-through-iap \
+            "$GITHUB_WORKSPACE/release.tgz" "app-vm:/tmp/release-$SHA.tgz"
           $SSH "set -euo pipefail
-            install -d /opt/app/releases/$SHA
-            tar -xzf /tmp/release-$SHA.tgz -C /opt/app/releases/$SHA
+            sudo install -d -o appsvc -g appsvc /opt/app/releases/$SHA
+            sudo tar -xzf /tmp/release-$SHA.tgz -C /opt/app/releases/$SHA
+            sudo chown -R appsvc:appsvc /opt/app/releases/$SHA
             rm -f /tmp/release-$SHA.tgz
-            ln -sfn /opt/app/releases/$SHA /opt/app/current"
+            sudo ln -sfn /opt/app/releases/$SHA /opt/app/current"
 
       - name: Write /opt/app/.env.production from secrets
         env:
-          IP: ${{ steps.vm.outputs.ip }}
-          SSH_USER: ${{ secrets.VM_SSH_USER }}
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          ZONE: ${{ secrets.GCP_ZONE }}
+          SHA: ${{ github.sha }}
           IDENTITY_PLATFORM_API_KEY: ${{ secrets.IDENTITY_PLATFORM_API_KEY }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
+          # Build the env file locally and copy it over the tunnel — the secret
+          # value never appears on a remote command line or in process args.
+          umask 077
+          ENV_FILE="$(mktemp)"
           {
             echo "NODE_ENV=production"
             echo "PORT=3000"
             echo "IDENTITY_PLATFORM_API_KEY=$IDENTITY_PLATFORM_API_KEY"
             echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT"
-          } | ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes \
-            "$SSH_USER@$IP" \
-            "umask 077 && cat > /opt/app/.env.production && chmod 600 /opt/app/.env.production"
+          } > "$ENV_FILE"
+          GCLOUD="gcloud compute --quiet --project=$PROJECT"
+          $GCLOUD scp --zone="$ZONE" --tunnel-through-iap "$ENV_FILE" "app-vm:/tmp/env-$SHA"
+          shred -u "$ENV_FILE"
+          $GCLOUD ssh app-vm --zone="$ZONE" --tunnel-through-iap --command "set -euo pipefail
+            sudo install -m 600 -o appsvc -g appsvc /tmp/env-$SHA /opt/app/.env.production
+            sudo shred -u /tmp/env-$SHA"
 
-      - name: Reload PM2
+      - name: Reload PM2 as appsvc
         env:
-          IP: ${{ steps.vm.outputs.ip }}
-          SSH_USER: ${{ secrets.VM_SSH_USER }}
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          ZONE: ${{ secrets.GCP_ZONE }}
         run: |
           set -euo pipefail
-          ssh -i "$HOME/.ssh/deploy_key" -o StrictHostKeyChecking=yes "$SSH_USER@$IP" \
-            "cd /opt/app && (pm2 reload ecosystem.config.js --update-env || pm2 start ecosystem.config.js) && pm2 save"
+          gcloud compute --quiet --project="$PROJECT" ssh app-vm \
+            --zone="$ZONE" --tunnel-through-iap --command \
+            "sudo -u appsvc bash -lc 'cd /opt/app && (pm2 reload ecosystem.config.js --update-env || pm2 start ecosystem.config.js) && pm2 save'"
 
       - name: Health poll (fail after 2 minutes without HTTP 200)
         env:
