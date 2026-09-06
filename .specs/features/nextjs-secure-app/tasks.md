@@ -489,15 +489,16 @@ T13 → T14 → T15 → T16
 - Skill: NONE
 
 **Done when**:
-- [ ] Revokes refresh tokens for the session's uid, clears the cookie with `Max-Age=0`, and returns 303 to `/`
-- [ ] Replaying the old cookie afterwards fails verification — covered by asserting `revokeSession` was called with the right uid and that `verifySession` returns null once revoked in the fake
-- [ ] A logout request with no valid session still clears the cookie and returns 303 (idempotent, no 500)
-- [ ] Unit tests cover: authenticated logout, logout with no cookie, logout with an already-invalid cookie
-- [ ] Quick gate passes
+- [x] Revokes refresh tokens for the session's uid, clears the cookie with `Max-Age=0`, and returns 303 to `/`
+- [x] Replaying the old cookie afterwards fails verification — covered by asserting `revokeSession` was called with the right uid and that `verifySession` returns null once revoked in the fake
+- [x] A logout request with no valid session still clears the cookie and returns 303 (idempotent, no 500)
+- [x] Unit tests cover: authenticated logout, logout with no cookie, logout with an already-invalid cookie
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add logout route handler`
+**Status**: [x] Complete
 
 ---
 
