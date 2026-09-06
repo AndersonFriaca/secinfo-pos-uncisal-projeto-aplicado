@@ -97,6 +97,15 @@ EOF
   nginx -t && systemctl reload nginx
 fi
 
+# --- Stage 5b: hide the Nginx version in the Server header (server_tokens off) ---
+# Dropped into conf.d (included from the stock nginx.conf http{} block) so the
+# directive applies to every server block, present and future.
+TOKENS_CONF="/etc/nginx/conf.d/server-tokens.conf"
+if [ ! -f "$TOKENS_CONF" ]; then
+  echo "server_tokens off;" > "$TOKENS_CONF"
+  nginx -t && systemctl reload nginx
+fi
+
 # SPEC_DEVIATION: design.md assumed "Certbot's Nginx plugin rewrites the
 # server block for HTTPS + redirect" — verified false as of this writing:
 # the nginx/apache plugins do not support IP-address certs, only
@@ -226,10 +235,11 @@ module.exports = {
   apps: [
     {
       name: "nextjs-app",
-      script: "npm",
-      args: "start",
+      script: "current/server.js",
       cwd: "/opt/app",
+      node_args: "--env-file=/opt/app/.env.production",
       env: {
+        NODE_ENV: "production",
         PORT: 3000,
       },
     },

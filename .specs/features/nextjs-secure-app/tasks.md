@@ -793,13 +793,14 @@ T25 → T26
 - Skill: NONE
 
 **Done when**:
-- [ ] The Nginx configuration written by the startup script includes `server_tokens off;` so the `Server` header carries no version
-- [ ] `ecosystem.config.js` runs the standalone server (`node current/server.js`) from `/opt/app` with `NODE_ENV=production`, `PORT=3000`, and the env file at `/opt/app/.env.production`
-- [ ] Shell gate passes and `node --check infra/scripts/ecosystem.config.js` succeeds
+- [x] The Nginx configuration written by the startup script includes `server_tokens off;` so the `Server` header carries no version
+- [x] `ecosystem.config.js` runs the standalone server (`node current/server.js`) from `/opt/app` with `NODE_ENV=production`, `PORT=3000`, and the env file at `/opt/app/.env.production`
+- [x] Shell gate passes and `node --check infra/scripts/ecosystem.config.js` succeeds
 
 **Tests**: none (config layer)
 **Gate**: Shell
 **Commit**: `feat(infra): hide nginx version and run standalone next build via pm2`
+**Status**: [x] Complete
 
 ---
 
