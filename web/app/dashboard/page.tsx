@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getSessionState } from "@/lib/auth/session";
+import { dashboardRedirect } from "@/lib/dashboard-guard";
 
 const SESSION_COOKIE = "__session";
 
@@ -29,8 +30,9 @@ export default async function DashboardPage() {
   // SPEC_DEVIATION: Next's redirect() issues 307, the spec names 303.
   // Reason: a page render cannot set the redirect status; both are a GET
   // navigation and the guard's branches are unit-tested in session.test.ts.
-  if (state.status === "unverified") {
-    redirect("/verify-email");
+  const target = dashboardRedirect(state);
+  if (target) {
+    redirect(target);
   }
   if (state.status !== "authenticated") {
     redirect("/login");
