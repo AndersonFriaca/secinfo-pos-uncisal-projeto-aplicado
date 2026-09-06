@@ -249,17 +249,18 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] Exposes the decision functions for the `auth` bucket (10 req/min) and `general` bucket (100 req/min), plus login-failure counting
-- [ ] The 5th consecutive failure sets `blockedUntil = now + 60_000`; the 4th does not
-- [ ] A successful login resets the failure counter to 0
-- [ ] At exactly `blockedUntil` the IP is allowed again with a zeroed counter; one millisecond earlier it is still blocked
-- [ ] Thresholds are parameters, not literals at the call sites
-- [ ] Unit tests drive `now` explicitly and assert the transitions at the 4th failure, the 5th failure, the 60-second boundary, and the window rollover for both buckets — no `sleep` in the suite
-- [ ] Quick gate passes
+- [x] Exposes the decision functions for the `auth` bucket (10 req/min) and `general` bucket (100 req/min), plus login-failure counting
+- [x] The 5th consecutive failure sets `blockedUntil = now + 60_000`; the 4th does not
+- [x] A successful login resets the failure counter to 0
+- [x] At exactly `blockedUntil` the IP is allowed again with a zeroed counter; one millisecond earlier it is still blocked
+- [x] Thresholds are parameters, not literals at the call sites
+- [x] Unit tests drive `now` explicitly and assert the transitions at the 4th failure, the 5th failure, the 60-second boundary, and the window rollover for both buckets — no `sleep` in the suite
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add rate limit and brute force core logic`
+**Status**: [x] Complete
 
 ---
 
