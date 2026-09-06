@@ -794,3 +794,182 @@ a `count`. See G4.
 5. **G5 — Cosmetic.** `docs/architecture.md:43` still labels the firewall box
    "22 / 80 / 443 only" without the IAP-vs-opt-in-CIDR distinction its own
    following lines now draw.
+
+---
+
+## Amendment 2 — fix round (re-verification)
+
+**Date**: 2026-09-06
+**Diff range**: `77d0e72..HEAD` (`11baf2a`, `34a6241`, `ab2adfa`, `ac105e9`, `80e69a1`)
+**Verifier**: independent sub-agent (author ≠ verifier), read-only over the real tree
+**Iteration**: fix→re-verify 1 of 3 for Amendment 2's G1..G5
+
+**Verdict**: **PASS ✅ with one P0 pre-deploy residual (G6, new).** G2, G3, G4 and
+G5 are fully closed. G1 is closed on (a) permission shape and (c) no predefined
+project role, and the custom role is correct as far as it goes — but the
+deploy.yml→permission mapping re-derived independently against Google's current
+IAP doc shows **one still-unauthorized call**: publishing the ephemeral SSH key.
+On this VM (no OS Login, no `block-project-ssh-keys`) `gcloud compute ssh` writes
+to *project* metadata, which needs `compute.projects.setCommonInstanceMetadata` —
+absent by design from a read-only custom role. Same class as G1 itself: a
+documented pre-deploy risk, not an observed failure, and not verifiable without a
+live apply.
+
+### Per-gap close-out
+
+| Gap | Status | Evidence |
+| --- | --- | --- |
+| **G1 (P0)** — custom project role for the IAP deploy | ⚠️ **Partially closed** — (a) ✅, (c) ✅, (b) one gap remains → **G6** | `infra/wif.tf:135-147` `google_project_iam_custom_role.deploy_vm_operator`, `infra/wif.tf:149-153` `google_project_iam_member.deploy_vm_operator` bound to `google_project_iam_custom_role.deploy_vm_operator.id` |
+| G1(a) — read-only permission set | ✅ Closed | `infra/wif.tf:140-145` — exactly `compute.globalOperations.get`, `compute.instances.list`, `compute.projects.get`, `compute.zoneOperations.get`. No `*.set*`, no `*.create`, no `*.delete`, no `*.update`, no write verb of any kind. `stage = "GA"` (`:146`) |
+| G1(c) — no predefined project role | ✅ Closed | `git grep -nE 'google_project_iam' -- infra/` → only `wif.tf:135`, `:149`, `:151`; the single `google_project_iam_member` takes `role = google_project_iam_custom_role.deploy_vm_operator.id` (`wif.tf:151`), never a `roles/…` literal. No `roles/owner`, `roles/editor`, or predefined `roles/compute.*` at project scope anywhere under `infra/` |
+| **G2** — spec/design wording | ✅ Closed | `spec.md:261` now reads "its only project-scoped grant SHALL be **one custom role limited to compute read/list and operation-get permissions**; it SHALL hold **no predefined project role**"; Independent Test `spec.md:265` asserts `projects get-iam-policy` shows only `projects/<id>/roles/deployVmOperator` plus `iam roles describe deployVmOperator` lists only read/list/operations-get. `design.md:213` lists `google_project_iam_custom_role` + `google_project_iam_member` in the resource table; `design.md:214` now reads "Direct public `allow-ssh` is opt-in via `var.operator_ssh_cidrs`, default off (Amendment 2)" — the stale "stays for the operator" line is gone; `design.md:293` decision row names all four custom-role permissions. `tasks.md:735`, `:854` re-derived. Supersede notes, history intact: `.specs/features/gcp-infra-terraform/spec.md:68`, `design.md:101`, `tasks.md:438` — each a single added line citing AD-007, no prior text rewritten |
+| **G3** — apply-destroys-`allow-ssh` warning | ✅ Closed | `docs/operations.md:31-35` — "Running `terraform apply` with `operator_ssh_cidrs` unset (the default) deletes any existing public `allow-ssh` rule and drops direct operator SSH", plus both recovery paths (`gcloud compute ssh --tunnel-through-iap` with `roles/iap.tunnelResourceAccessor`, or set `operator_ssh_cidrs` before applying) |
+| **G4** — credential-free CI guard | ✅ Closed (guard exists, is credential-free, and kills the three targeted regressions — evasions noted as S-residuals below) | `.github/workflows/ci.yml:38-88` — job `iac-guardrails` (`:38`), `actions/checkout@v4` only, no `google-github-actions/auth`, no secrets. Step `:48-57` (predefined project role, grep at `:52-53`), `:60-79` (firewall `tcp:22` + `0.0.0.0/0`, `awk` over `infra/firewall.tf` at `:64-74`), `:81-88` (`allow_ssh` keeps `count =`, grep at `:85`) |
+| **G5** — architecture firewall description | ✅ Closed | `docs/architecture.md:41-42` — "Firewall (custom VPC, never GCP's `default`): :22 from the IAP range only / by default (public :22 opt-in via var.operator_ssh_cidrs), plus :80 and :443". No `22 / 80 / 443 only` label remains (`grep -n '22' docs/architecture.md` → `:41`, `:42`, `:47`, all IAP-aware) |
+
+### `deploy.yml` call → authorizing permission (re-derived)
+
+Source of truth: `https://docs.cloud.google.com/iap/docs/using-tcp-forwarding`,
+fetched 2026-09-06. Its "Permissions required" table for
+`gcloud compute [start-iap-tunnel, ssh, scp]`: `iap.tunnelInstances.accessViaIAP`
+(instance), `compute.instances.get` (instance), `compute.instances.list`
+(project), `compute.projects.get` (project); **non-OS-Login additionally**
+`compute.instances.setMetadata` (instance), `compute.projects.setCommonInstanceMetadata`
+(**project**), `compute.globalOperations.get` (project); service-account SSH
+additionally `iam.serviceAccounts.actAs`.
+
+| `deploy.yml` call | Permission needed | Granted by | Scope | OK? |
+| --- | --- | --- | --- | --- |
+| `instances describe` (`:76`, `:82`, `:90`) | `compute.instances.get` | `roles/compute.instanceAdmin.v1` @ instance — `wif.tf:97-103` | instance | ✅ |
+| `instances start` (`:79`) | `compute.instances.start` | same | instance | ✅ |
+| `instances start` on an SA-attached VM | `iam.serviceAccounts.actAs` | `roles/iam.serviceAccountUser` @ default compute SA — `wif.tf:113-117` (target `wif.tf:93-95`) | SA | ✅ |
+| poll the `instances.start` operation (implicit at `:79`) | `compute.zoneOperations.get` | custom role — `wif.tf:144` | project | ✅ **newly closed** |
+| `ssh`/`scp --tunnel-through-iap` (`:108`, `:115`, `:144`, `:146`, `:156-157`) — open tunnel | `iap.tunnelInstances.accessViaIAP` | `roles/iap.tunnelResourceAccessor` @ instance — `wif.tf:105-111` | instance | ✅ |
+| same — gcloud's pre-connect project probe | `compute.projects.get` | custom role — `wif.tf:143` | project | ✅ **newly closed** |
+| same — gcloud's instance enumeration | `compute.instances.list` | custom role — `wif.tf:142` | project | ✅ **newly closed** |
+| same — publish the ephemeral key, **project** metadata path | `compute.projects.setCommonInstanceMetadata` | **nothing** | project (write) | ❌ **G6** |
+| same — publish the ephemeral key, **instance** metadata path (only taken when `block-project-ssh-keys=TRUE`) | `compute.instances.setMetadata` | `instanceAdmin.v1` @ instance | instance | ✅ but path not reachable — see G6 |
+| same — poll the metadata-write operation | `compute.globalOperations.get` | custom role — `wif.tf:141` | project | ✅ **newly closed** |
+| `curl https://$IP/` (`:166`) | none (public `:443`) | `infra/firewall.tf:51-61` | — | ✅ |
+| WIF token exchange (`:52-57`) | `iam.workloadIdentityUser` | `wif.tf:58-62` | repo principalSet | ✅ |
+
+**Excess grants**: none. All four custom-role permissions map to a call above.
+`instanceAdmin.v1` remains broader per-instance than `get`+`start`+`setMetadata`,
+but is instance-bound with no project reach — unchanged from Amendment 2 and
+still acceptable.
+
+**G6 derivation.** `infra/compute.tf:46-49` sets instance `metadata` to
+`ssh-keys` + `startup-script` only — no `enable-oslogin`, no
+`block-project-ssh-keys`. Per Compute Engine's own docs
+(`https://docs.cloud.google.com/compute/docs/connect/restrict-ssh-keys`),
+`gcloud compute ssh` pushes the key to **project-wide** metadata on every
+invocation and only falls back to instance metadata when the target VM has
+`block-project-ssh-keys=TRUE`. So the granted instance-scoped
+`compute.instances.setMetadata` is on the branch gcloud will not take, and the
+branch it will take needs a project **write** permission the read-only custom
+role correctly refuses to carry. Two candidate fixes, the first strictly tighter:
+(1) add `block-project-ssh-keys = "TRUE"` to `infra/compute.tf`'s `metadata`,
+forcing gcloud onto the already-authorized instance-metadata path — also a
+security win independent of CI; (2) add
+`compute.projects.setCommonInstanceMetadata` to `deployVmOperator`, which would
+make it a write role and weaken `spec.md:261`'s "read/list and operation-get"
+wording. Option 1 keeps the spec as written.
+
+### CI guard — kill verification (run directly, throwaway worktree)
+
+The three `ci.yml:48-88` shell bodies were extracted verbatim and executed in a
+`git worktree add --detach` at `HEAD`. Real-tree `git status --porcelain` was
+empty before and after; the worktree was removed with `--force` + `prune`.
+
+**Baseline (unmutated `HEAD`)**: all three steps exit 0 — no false positive.
+
+| # | Mutation | Guard step | Result |
+| --- | --- | --- | --- |
+| M1 | Appended `google_project_iam_member "oops"` with `role = "roles/editor"` to `infra/wif.tf` | `ci.yml:48` | ✅ **KILLED** — `G1-FAIL: infra/wif.tf:154:resource "google_project_iam_member" "oops" {`, exit 1 (prior sensor S1 now dead) |
+| M2 | `infra/firewall.tf` `source_ranges = var.operator_ssh_cidrs` → `["0.0.0.0/0"]` | `ci.yml:60` | ✅ **KILLED** — `G2-FAIL: resource "google_compute_firewall" "allow_ssh" {`, exit 1 |
+| M3 | Deleted the `count = length(var.operator_ssh_cidrs) > 0 ? 1 : 0` line (`infra/firewall.tf:10`) | `ci.yml:81` | ✅ **KILLED** — exit 1 (prior sensor S2 now dead) |
+
+**3/3 targeted mutations killed.** Amendment 2's sensor was 0/5.
+
+**Guard evasions found (new, S-class residuals — the guard is real but narrow):**
+
+| # | Mutation | Guard result | Note |
+| --- | --- | --- | --- |
+| S6 | Kept the resource named `deploy_vm_operator` but swapped `role = google_project_iam_custom_role.deploy_vm_operator.id` → `role = "roles/editor"` (`infra/wif.tf:151`) | ❌ **survived** — `G1-PASS`, `terraform validate` exit 0 | The `grep -v` at `ci.yml:53` exempts by **resource name**, not by the role **value**. An offender that reuses the allowlisted name inherits the exemption. Tightening: assert the exempted block's `role` line references `google_project_iam_custom_role`, or grep for `google_project_iam_member` bodies containing a `"roles/` literal |
+| S7 | New file `infra/extra.tf` with a `google_compute_firewall` opening `tcp:22` from `0.0.0.0/0` | ❌ **survived** — `G2-PASS`, `terraform fmt -check` exit 0 | The `awk` at `ci.yml:64-74` reads **only** `infra/firewall.tf`. Tightening: `awk … infra/*.tf` |
+| S8 | `infra/variables.tf` `operator_ssh_cidrs` default `[]` → `["0.0.0.0/0"]` | ❌ **survived** — `G2-PASS` | Same security outcome as S2/M2 (public `:22` on by default) but expressed as a variable default, not a firewall literal — outside all three guards. This is prior sensor **S3, still alive.** Tightening: assert no `0.0.0.0/0` in `infra/variables.tf` |
+| S9 | Deleted `google_service_account_iam_member.deploy_sa_user` (the `actAs` binding, `wif.tf:113-117`) | ❌ survived — guards pass, `terraform validate` exit 0 | Review-only, as in Amendment 2 (S4). No guard targets a *missing* binding |
+| S10 | Added the write permission `compute.instances.setServiceAccount` to `deployVmOperator.permissions` | ❌ survived — guards pass, `terraform validate` exit 0 | **New surface introduced by this fix round**: the custom role's permission list is the thing keeping the project grant least-privilege, and nothing asserts it stays read-only. Cheapest tightening: a fourth guard step asserting every entry in `deploy_vm_operator`'s `permissions` matches `\.(get|list)$` |
+| S11 | Deleted the `operator_ssh_cidrs` CIDR `validation` block (`infra/variables.tf:43-46`) | ❌ survived | Review-only, as in Amendment 2 (S5). `validation` blocks are plan-time only |
+
+**Sensor depth**: lightweight (11 mutations total: 3 guard-targeted, 8 probing
+the guard's edges). **Result**: 3/3 guard-targeted killed; 6 outside the guard's
+reach or evading it, of which S6, S8 and S10 are cheaply closable and S9/S11
+remain structurally review-only.
+
+### Gate results
+
+| Gate | Result |
+| --- | --- |
+| `terraform fmt -check -recursive infra` | exit 0 |
+| `terraform -chdir=infra validate` | Success, exit 0 |
+| `terraform -chdir=infra/bootstrap validate` | Success, exit 0 |
+| `.github/workflows/ci.yml` parses (`yaml.safe_load`) | ok |
+| `.github/workflows/deploy.yml` parses (`yaml.safe_load`) | ok |
+| `validate_spec.py nextjs-secure-app` | exit 0 — 0 errors / 0 warnings |
+| `validate_spec.py gcp-infra-terraform` | exit 0 — 0 errors / 0 warnings |
+| `validate_tasks.py nextjs-secure-app` | exit 0 — 0 errors, 16 pre-existing `Tests: none` warnings (infra/CI tasks, unchanged) |
+| `validate_state.py nextjs-secure-app` | exit 0 — 0 errors |
+| `cd web && npm test` | 15 files, **149 passed**, 0 failed (unchanged; `web/` untouched by `77d0e72..HEAD`) |
+| `cd web && npm run build` | clean — 10 routes + middleware compiled, no error |
+| `git status --porcelain` | empty at start, after the sensor worktree, and after `npm run build` |
+| `git ls-files` secret sweep | 112 tracked files; no `.pem`/`.key`/`.p12`/`id_rsa`/`.env`; no tracked `terraform.tfvars` or `backend.hcl` (only `terraform.tfvars.example`). The three `key`/`credential`-matching paths are `web/components.json`, `web/lib/validation/credentials.ts`, `web/lib/validation/credentials.test.ts` — source, no secrets |
+
+### Overall verdict — whole feature, both amendments
+
+**PASS ✅**, with one P0 pre-deploy item (G6) that no local gate can settle.
+
+- **Base feature** (`cc46312..63ef549`): PASS — 149 tests, all 7 first-round gaps
+  resolved, mutants killed.
+- **Amendment 1** (permission/IAP hardening): PASS — 4 minor residuals, R2 and R3
+  since closed by Amendment 2.
+- **Amendment 2** (`c36095f..77d0e72`): PASS with G1..G5.
+- **Amendment 2 fix round** (`77d0e72..HEAD`): G2/G3/G4/G5 closed; G1 closed on
+  shape and predefined-role prohibition; the deploy SA now has documented
+  authority for every `deploy.yml` call **except** the project-metadata SSH-key
+  write (**G6**).
+
+Every gate is green and the real tree was never mutated. The one thing that
+cannot be proven from here — that the keyless IAP deploy actually connects — is
+still an operator live step (`.specs/STATE.md`), and G6 says it will most likely
+fail on the first attempt until `block-project-ssh-keys = "TRUE"` is set on the
+VM.
+
+### Ranked residual gaps
+
+1. **G6 — P0, pre-deploy.** `gcloud compute ssh --tunnel-through-iap` writes the
+   ephemeral key to **project** metadata on this VM (`infra/compute.tf:46-49` has
+   no `block-project-ssh-keys`, no OS Login), requiring
+   `compute.projects.setCommonInstanceMetadata`, which `deployVmOperator`
+   (`infra/wif.tf:140-145`) deliberately lacks. Preferred fix: add
+   `block-project-ssh-keys = "TRUE"` to `infra/compute.tf`'s `metadata` block —
+   it routes gcloud onto the already-granted instance-scoped
+   `compute.instances.setMetadata`, keeps the custom role read-only, and needs no
+   spec change. Also correct the claim at `infra/wif.tf:78-79` that gcloud
+   publishes the key "into instance metadata".
+2. **S6 — Minor, enforcement.** `ci.yml:53` exempts the allowed
+   `google_project_iam_member` by resource **name**; an offender reusing
+   `deploy_vm_operator` with `role = "roles/editor"` passes. Assert the role
+   **value** references `google_project_iam_custom_role`.
+3. **S10 — Minor, enforcement.** Nothing asserts `deployVmOperator.permissions`
+   stays read-only; adding `compute.instances.setServiceAccount` passes every
+   gate. Add a guard step requiring each permission to end in `.get`/`.list`.
+4. **S8 — Minor, enforcement.** `operator_ssh_cidrs` default `["0.0.0.0/0"]`
+   still evades all three guards (prior sensor S3, unclosed). Add a
+   `0.0.0.0/0`-in-`infra/variables.tf` assertion.
+5. **S7 — Minor, enforcement.** The firewall guard scans only
+   `infra/firewall.tf`; a `:22`-to-world rule in any other `infra/*.tf` passes.
+   Widen the `awk` input to `infra/*.tf`.
+6. **Carried from Amendment 1 — Minor.** `infra/scripts/startup.sh.tpl:244-257`
+   still duplicates `infra/scripts/ecosystem.config.js` with only a comment
+   enforcing parity. Add a `diff`-based gate.

@@ -104,6 +104,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: docs/operations.md:32-38 (docs)
 - last seen: 2026-09-06T17:13:05Z
 
+### L-016 - Before granting a CLI the permissions a cloud doc lists, check which branch of the doc's conditional applies to this resource: gcloud compute ssh writes the ephemeral key to project metadata unless the VM sets block-project-ssh-keys=TRUE, so the instance-scoped setMetadata grant covers a path gcloud never takes.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `infra` · harmful: 0
+- features: nextjs-secure-app
+- evidence: infra/wif.tf:140-145 + infra/compute.tf:46-49 (infra)
+- last seen: 2026-09-06T17:26:40Z
+
+### L-017 - A CI guard that allowlists an exception by resource or symbol name lets an offender inherit the exemption by reusing that name; allowlist the permitted value the guard actually cares about, not the identifier.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `ci` · harmful: 0
+- features: nextjs-secure-app
+- evidence: S6 - .github/workflows/ci.yml:53 (ci)
+- last seen: 2026-09-06T17:26:40Z
+
+### L-018 - Scope a static security guard to every file that can express the invariant, not the one file that currently does: a rule moved to a sibling file, a variable default, or a widened permission list evades a single-file grep with all gates green.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `ci` · harmful: 0
+- features: nextjs-secure-app
+- evidence: S7/S8/S10 - .github/workflows/ci.yml:64-74 (ci)
+- last seen: 2026-09-06T17:26:40Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

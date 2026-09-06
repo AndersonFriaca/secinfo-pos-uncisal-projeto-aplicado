@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 16,
+  "next_id": 19,
   "lessons": [
     {
       "id": "L-001",
@@ -275,6 +275,60 @@
       ],
       "created": "2026-09-06T17:13:05Z",
       "last_seen": "2026-09-06T17:13:05Z"
+    },
+    {
+      "id": "L-016",
+      "key": "ac_gap::before granting a cli the permissions a cloud doc lists check which branch of the doc s conditional applies to this resource gcloud compute ssh writes the ephemeral key to project metadata unless the vm sets block project ssh keys true so the instance scoped setmetadata grant covers a path gcloud never takes",
+      "text": "Before granting a CLI the permissions a cloud doc lists, check which branch of the doc's conditional applies to this resource: gcloud compute ssh writes the ephemeral key to project metadata unless the VM sets block-project-ssh-keys=TRUE, so the instance-scoped setMetadata grant covers a path gcloud never takes.",
+      "signal": "ac_gap",
+      "scope": "infra",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "infra/wif.tf:140-145 + infra/compute.tf:46-49 (infra)"
+      ],
+      "created": "2026-09-06T17:26:40Z",
+      "last_seen": "2026-09-06T17:26:40Z"
+    },
+    {
+      "id": "L-017",
+      "key": "surviving_mutant::a ci guard that allowlists an exception by resource or symbol name lets an offender inherit the exemption by reusing that name allowlist the permitted value the guard actually cares about not the identifier",
+      "text": "A CI guard that allowlists an exception by resource or symbol name lets an offender inherit the exemption by reusing that name; allowlist the permitted value the guard actually cares about, not the identifier.",
+      "signal": "surviving_mutant",
+      "scope": "ci",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "S6 - .github/workflows/ci.yml:53 (ci)"
+      ],
+      "created": "2026-09-06T17:26:40Z",
+      "last_seen": "2026-09-06T17:26:40Z"
+    },
+    {
+      "id": "L-018",
+      "key": "surviving_mutant::scope a static security guard to every file that can express the invariant not the one file that currently does a rule moved to a sibling file a variable default or a widened permission list evades a single file grep with all gates green",
+      "text": "Scope a static security guard to every file that can express the invariant, not the one file that currently does: a rule moved to a sibling file, a variable default, or a widened permission list evades a single-file grep with all gates green.",
+      "signal": "surviving_mutant",
+      "scope": "ci",
+      "status": "candidate",
+      "features": [
+        "nextjs-secure-app"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "S7/S8/S10 - .github/workflows/ci.yml:64-74 (ci)"
+      ],
+      "created": "2026-09-06T17:26:40Z",
+      "last_seen": "2026-09-06T17:26:40Z"
     }
   ]
 }
