@@ -211,7 +211,7 @@ PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_E
 | `google_firestore_database` | Native mode, `location_id = "us-east1"` (TF-03) |
 | `google_iam_workload_identity_pool` + `..._provider` | GitHub OIDC (`issuer_uri = "https://token.actions.githubusercontent.com"`), `attribute_mapping` for `google.subject`/`attribute.repository`/`attribute.repository_owner`, and an `attribute_condition` restricting to this repository (TF-04) |
 | `google_service_account` + `google_service_account_iam_member` | Deploy SA bound with `roles/iam.workloadIdentityUser` to the `principalSet://` for this repo; project roles limited to `roles/compute.instanceAdmin.v1` (start VM + publish the ephemeral SSH key to metadata), `roles/iam.serviceAccountUser`, and `roles/iap.tunnelResourceAccessor` (open the IAP SSH tunnel) (TF-05) |
-| `google_compute_firewall` `allow-iap-ssh` + `iap.googleapis.com` service | `tcp:22` from the IAP range `35.235.240.0/20` to `web-server`-tagged instances — the ingress path for the keyless deploy. The public `allow-ssh` rule stays for the operator. |
+| `google_compute_firewall` `allow-iap-ssh` (in `infra/firewall.tf`, alongside the existing rules) + `iap.googleapis.com` service | `tcp:22` from the IAP range `35.235.240.0/20` to `web-server`-tagged instances — the ingress path for the keyless deploy. The public `allow-ssh` rule stays for the operator. |
 | `outputs.tf` additions | WIF provider resource name, deploy SA email (TF-06) |
 
 ---
