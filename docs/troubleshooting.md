@@ -7,8 +7,10 @@
 gcloud compute instances get-serial-port-output app-vm --zone=<zone> --project=<project_id> \
   | grep -iE "startup-script|error|failed"
 
-# SSH via gcloud's own managed key — bypasses a passphrase-locked local key:
-gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --project=<project_id>
+# SSH via gcloud's own managed key — bypasses a passphrase-locked local key.
+# Add --tunnel-through-iap unless your IP is in operator_ssh_cidrs (the
+# calling principal then needs roles/iap.tunnelResourceAccessor):
+gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --project=<project_id> --tunnel-through-iap
 ```
 
 Search for `Script "startup-script" failed with error: exit status N` in
@@ -65,4 +67,4 @@ matches the current state, not just that a file is present.
 | `googleapi: Error 403 ... Compute Engine API has not been used` | `compute.googleapis.com` not enabled yet | `gcloud services enable compute.googleapis.com --project=<project-id>` |
 | `Error creating Budget: ... Error 400` with no further detail | `billing_alert_currency_code` doesn't match the billing account's actual currency | `gcloud billing accounts describe <account-id>` to check, then set the matching currency in `infra/bootstrap/terraform.tfvars` |
 | `Changing the machine_type, ... shielded_instance_config, ... network_interface ... on a started instance requires stopping it` | An in-place change needs the instance stopped first | Already handled — `allow_stopping_for_update = true` is set on the instance |
-| SSH `Permission denied (publickey)` right after the metadata shows the key is correct | The guest agent hasn't propagated the key to the VM yet, or your local private key needs a passphrase your shell can't supply | Wait ~30s and retry, or use `gcloud compute ssh` (uses its own managed key, sidesteps a locked local key) |
+| SSH `Permission denied (publickey)` right after the metadata shows the key is correct | The guest agent hasn't propagated the key to the VM yet, or your local private key needs a passphrase your shell can't supply | Wait ~30s and retry, or use `gcloud compute ssh ... --tunnel-through-iap` (uses its own managed key, sidesteps a locked local key; needed unless your IP is in `operator_ssh_cidrs`) |

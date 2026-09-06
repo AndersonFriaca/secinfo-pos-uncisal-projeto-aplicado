@@ -30,11 +30,12 @@ before running Terraform changes against `infra/`.
 
 ## Health checks
 
-SSH in (via `gcloud compute ssh` if your own key needs a passphrase your
-shell can't supply non-interactively):
+SSH in. Unless the caller's IP is in `operator_ssh_cidrs`, there is no
+public `:22`, so go through the IAP tunnel — the calling principal needs
+`roles/iap.tunnelResourceAccessor` (Owner works too, with a self-grant):
 
 ```bash
-gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --project=<project_id>
+gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --project=<project_id> --tunnel-through-iap
 ```
 
 Then, on the VM:

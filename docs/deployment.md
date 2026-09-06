@@ -29,7 +29,9 @@ cp infra/backend.hcl.example infra/backend.hcl   # bucket name goes here after s
 
 `infra/terraform.tfvars` needs: `project_id`, `region` (default
 `us-east1`), `zone` (default `us-east1-b`), `ssh_username`,
-`ssh_public_key_path`. A separate `infra/bootstrap/terraform.tfvars` needs:
+`ssh_public_key_path`, and optionally `operator_ssh_cidrs` (default `[]` =
+no public `:22`; reach the VM via `--tunnel-through-iap`). A separate
+`infra/bootstrap/terraform.tfvars` needs:
 `project_id`, `region`, `state_bucket_name` (must be globally unique —
 `<project-id>-state` is a safe convention), `billing_account_name` (find it
 with `gcloud billing accounts list`), and optionally
@@ -83,7 +85,7 @@ registered.
 terraform output instance_external_ip
 curl -I http://<ip>          # expect a 301 redirect to https
 curl -Ik https://<ip>        # expect a valid Let's Encrypt cert (302/502 on / is fine — no app deployed yet)
-ssh <ssh_username>@<ip>      # key-only; a password prompt would mean something's wrong
+gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --tunnel-through-iap   # key-only via IAP; a password prompt would mean something's wrong (use plain `ssh <user>@<ip>` only if your IP is in operator_ssh_cidrs)
 ```
 
 Once you actually deploy a Next.js build to `/opt/app` and `pm2 start

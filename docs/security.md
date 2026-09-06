@@ -9,12 +9,22 @@ Eixo 1) and to specific `infra/` code.
 `default` network. `default` ships with permissive `default-allow-*` rules
 (SSH, internal traffic, ICMP from anywhere) that would undermine
 least-privilege even after adding new rules on top of them — a custom VPC
-has *no* implicit-allow rules, so `infra/firewall.tf`'s three explicit
-rules (22, 80, 443) **are** the entire exposed surface, not "the exposed
-surface plus whatever `default` already opened."
+has *no* implicit-allow rules, so `infra/firewall.tf` **is** the entire
+exposed surface, not "the exposed surface plus whatever `default` already
+opened." That surface is: `tcp:22` from the IAP range `35.235.240.0/20`
+(always — this is how the keyless CI and `--tunnel-through-iap` reach
+sshd), `tcp:22` from `var.operator_ssh_cidrs` (only when the operator sets
+that list — direct SSH is opt-in, off by default), and `tcp:80` / `tcp:443`
+from anywhere.
 
-## SSH: key-only, brute-force protected
+## SSH: IAP tunnel by default, key-only, brute-force protected
 
+- By default there is **no public `:22`**. Reach the VM with
+  `gcloud compute ssh <user>@app-vm --tunnel-through-iap` (the caller's
+  principal needs `roles/iap.tunnelResourceAccessor`, or Owner plus a
+  self-grant). Direct `:22` from a fixed CIDR is opt-in: set
+  `operator_ssh_cidrs` in `terraform.tfvars` (e.g. `["203.0.113.4/32"]`)
+  and Terraform adds the `allow-ssh` rule for exactly those ranges.
 - `infra/compute.tf` injects the operator's **public** key via instance
   metadata (`ssh-keys`) — the private key never touches Terraform or the
   repository.

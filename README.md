@@ -6,9 +6,10 @@ for the full course requirements (Eixo 1: Cloud Infra).
 
 This repository provisions the infra layer only — the application itself is
 built in a separate feature. A hardened `e2-micro` VM serves HTTPS (real
-Let's Encrypt certificate, no domain needed) via Nginx, with SSH locked to
-key-only access, Fail2ban, and Shielded VM enabled, all pinned to stay
-inside GCP's Always Free tier.
+Let's Encrypt certificate, no domain needed) via Nginx, with SSH reachable
+only through an IAP tunnel by default (direct `:22` is opt-in via
+`operator_ssh_cidrs`), key-only, Fail2ban, and Shielded VM enabled, all
+pinned to stay inside GCP's Always Free tier.
 
 **📚 Full documentation is in [`docs/`](docs/)** — architecture, deployment
 steps, day-to-day operations, security rationale, the free-tier checklist,
