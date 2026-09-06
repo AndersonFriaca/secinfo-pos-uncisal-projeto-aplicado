@@ -459,19 +459,20 @@ T13 → T14 → T15 → T16
 - Skill: NONE
 
 **Done when**:
-- [ ] Valid credentials for a verified account → 303 to `/dashboard` with `Set-Cookie` carrying the session cookie and every attribute from T12
-- [ ] Invalid credentials → 401 with the generic message and the IP's failure counter incremented
-- [ ] Unknown email and wrong password produce **byte-identical** responses
-- [ ] A verified-but-unverified-email account → 303 to `/verify-email` and **no** session cookie set
-- [ ] A blocked IP → 429 with `Retry-After: 60`, and Identity Platform is **not** called (assert the mock was not invoked)
-- [ ] Identity Platform 5xx or a rate-limit store failure → 503 with a generic body, upstream detail logged server-side only
-- [ ] A successful login resets the failure counter
-- [ ] Unit tests cover every branch above, asserting status, `Location`, `Set-Cookie` presence/absence, and the exact `Retry-After` value
-- [ ] Full gate passes
+- [x] Valid credentials for a verified account → 303 to `/dashboard` with `Set-Cookie` carrying the session cookie and every attribute from T12
+- [x] Invalid credentials → 401 with the generic message and the IP's failure counter incremented
+- [x] Unknown email and wrong password produce **byte-identical** responses
+- [x] A verified-but-unverified-email account → 303 to `/verify-email` and **no** session cookie set
+- [x] A blocked IP → 429 with `Retry-After: 60`, and Identity Platform is **not** called (assert the mock was not invoked)
+- [x] Identity Platform 5xx or a rate-limit store failure → 503 with a generic body, upstream detail logged server-side only
+- [x] A successful login resets the failure counter
+- [x] Unit tests cover every branch above, asserting status, `Location`, `Set-Cookie` presence/absence, and the exact `Retry-After` value
+- [x] Full gate passes
 
 **Tests**: unit
 **Gate**: Full
 **Commit**: `feat(web): add login route handler with brute force protection`
+**Status**: [x] Complete
 
 ---
 
