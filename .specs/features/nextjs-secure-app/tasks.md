@@ -397,17 +397,18 @@ T11 → T12
 - Skill: NONE
 
 **Done when**:
-- [ ] `createSession(idToken)` calls `createSessionCookie` with a 12-hour expiry; `sessionCookieOptions()` returns `httpOnly: true`, `secure: true`, `sameSite: "strict"`, `path: "/"`, `maxAge: 43200`
-- [ ] `verifySession(cookie)` calls `verifySessionCookie(cookie, true)` — `checkRevoked` must be true — and returns `null` on any failure instead of throwing
-- [ ] `revokeSession(uid)` calls `revokeRefreshTokens`
-- [ ] `getAuthenticatedUser(cookieValue)` returns the user only when the cookie verifies **and** `email_verified` is true; returns `null` for a missing cookie, an invalid cookie, a revoked session, or an unverified email
-- [ ] The Admin SDK is injected (or module-mocked) so tests need no GCP credentials
-- [ ] Unit tests cover all four `getAuthenticatedUser` null branches plus the success branch, assert `checkRevoked: true` is actually passed, and assert every cookie attribute by value
-- [ ] Quick gate passes
+- [x] `createSession(idToken)` calls `createSessionCookie` with a 12-hour expiry; `sessionCookieOptions()` returns `httpOnly: true`, `secure: true`, `sameSite: "strict"`, `path: "/"`, `maxAge: 43200`
+- [x] `verifySession(cookie)` calls `verifySessionCookie(cookie, true)` — `checkRevoked` must be true — and returns `null` on any failure instead of throwing
+- [x] `revokeSession(uid)` calls `revokeRefreshTokens`
+- [x] `getAuthenticatedUser(cookieValue)` returns the user only when the cookie verifies **and** `email_verified` is true; returns `null` for a missing cookie, an invalid cookie, a revoked session, or an unverified email
+- [x] The Admin SDK is injected (or module-mocked) so tests need no GCP credentials
+- [x] Unit tests cover all four `getAuthenticatedUser` null branches plus the success branch, assert `checkRevoked: true` is actually passed, and assert every cookie attribute by value
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add firebase session cookie management and auth guard`
+**Status**: [x] Complete
 
 ---
 
