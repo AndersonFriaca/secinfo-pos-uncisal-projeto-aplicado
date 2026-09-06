@@ -165,14 +165,15 @@ T4 → T5 → T6
 - Skill: NONE
 
 **Done when**:
-- [ ] `normalizeEmail` trims, lowercases, rejects non-RFC shapes and anything over 254 characters, returning `null` on rejection
-- [ ] `validatePassword` enforces ≥12 characters with at least one lowercase, one uppercase, one digit, and one symbol, returning which rule failed
-- [ ] Unit tests assert each rule independently, including a password failing exactly one rule at a time and a 254/255-character email boundary pair
-- [ ] Quick gate passes; test count recorded in the commit body
+- [x] `normalizeEmail` trims, lowercases, rejects non-RFC shapes and anything over 254 characters, returning `null` on rejection
+- [x] `validatePassword` enforces ≥12 characters with at least one lowercase, one uppercase, one digit, and one symbol, returning which rule failed
+- [x] Unit tests assert each rule independently, including a password failing exactly one rule at a time and a 254/255-character email boundary pair
+- [x] Quick gate passes; test count recorded in the commit body
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add email and password validation`
+**Status**: [x] Complete
 
 ---
 
