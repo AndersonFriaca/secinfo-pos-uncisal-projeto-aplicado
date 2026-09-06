@@ -823,14 +823,15 @@ T27 → T28
 - Skill: NONE
 
 **Done when**:
-- [ ] Triggers on `pull_request` targeting `main`
-- [ ] Runs checkout → Node 22 setup → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test`, all with `working-directory: web`
-- [ ] Any failing step fails the job (no `continue-on-error`)
-- [ ] Workflow gate passes (valid YAML, expected trigger and test step present)
+- [x] Triggers on `pull_request` targeting `main`
+- [x] Runs checkout → Node 22 setup → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test`, all with `working-directory: web`
+- [x] Any failing step fails the job (no `continue-on-error`)
+- [x] Workflow gate passes (valid YAML, expected trigger and test step present)
 
 **Tests**: none (CI config; the workflow gate is the check)
 **Gate**: Workflow
 **Commit**: `ci: add pull request test gate`
+**Status**: [x] Complete
 
 ---
 
