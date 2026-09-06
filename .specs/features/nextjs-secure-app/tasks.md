@@ -370,16 +370,17 @@ T11 → T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Implements `signUp`, `signInWithPassword`, and `sendVerificationEmail` against `https://identitytoolkit.googleapis.com/v1/accounts:signUp|signInWithPassword|sendOobCode`, passing the API key as the `key` query parameter and reading it from a server-only environment variable
-- [ ] `sendVerificationEmail` posts `{ requestType: "VERIFY_EMAIL", idToken }` so Google sends the mail — no SMTP dependency
-- [ ] Every upstream 400 (`EMAIL_NOT_FOUND`, `INVALID_PASSWORD`, `INVALID_LOGIN_CREDENTIALS`, `EMAIL_EXISTS`) collapses to one generic failure result; upstream 5xx and a missing API key map to a distinct "unavailable" result
-- [ ] The API key never appears in a thrown error, a log line, or a returned value
-- [ ] Unit tests mock `fetch` and assert: the exact URL and body for each call, that two different 400 codes produce byte-identical generic results, that 5xx maps to unavailable, and that no assertion of the key leaks into an error message
-- [ ] Quick gate passes
+- [x] Implements `signUp`, `signInWithPassword`, and `sendVerificationEmail` against `https://identitytoolkit.googleapis.com/v1/accounts:signUp|signInWithPassword|sendOobCode`, passing the API key as the `key` query parameter and reading it from a server-only environment variable
+- [x] `sendVerificationEmail` posts `{ requestType: "VERIFY_EMAIL", idToken }` so Google sends the mail — no SMTP dependency
+- [x] Every upstream 400 (`EMAIL_NOT_FOUND`, `INVALID_PASSWORD`, `INVALID_LOGIN_CREDENTIALS`, `EMAIL_EXISTS`) collapses to one generic failure result; upstream 5xx and a missing API key map to a distinct "unavailable" result
+- [x] The API key never appears in a thrown error, a log line, or a returned value
+- [x] Unit tests mock `fetch` and assert: the exact URL and body for each call, that two different 400 codes produce byte-identical generic results, that 5xx maps to unavailable, and that no assertion of the key leaks into an error message
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add server-side identity platform rest client`
+**Status**: [x] Complete
 
 ---
 
