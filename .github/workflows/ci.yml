@@ -56,6 +56,28 @@ jobs:
             echo "$bad"
             exit 1
           fi
+          # The one allowed binding must reference the custom role by resource
+          # id, never a predefined "roles/..." literal (name-based allowlisting
+          # alone would let roles/editor through under the same resource name).
+          if grep -A4 'resource "google_project_iam_member" "deploy_vm_operator"' infra/wif.tf \
+               | grep -qE 'role\s*=\s*"roles/'; then
+            echo "::error::deploy_vm_operator binding must use google_project_iam_custom_role.deploy_vm_operator.id, not a predefined roles/ literal."
+            exit 1
+          fi
+
+      - name: Custom project role stays read-only
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          # Extract the permissions = [ ... ] list of the custom role and reject
+          # any mutating verb — the role exists only for reads and operation polls.
+          perms=$(awk '/resource "google_project_iam_custom_role" "deploy_vm_operator"/,/^}/' infra/wif.tf)
+          if echo "$perms" | grep -oE '"compute\.[a-zA-Z.]+"' \
+               | grep -qE '\.(set|setLabels|setMetadata|setCommonInstanceMetadata|create|delete|update|start|stop|reset|insert|use|attachDisk|detachDisk)"'; then
+            echo "::error::deployVmOperator custom role gained a mutating permission; it must stay read/list/operations-get only:"
+            echo "$perms" | grep -oE '"compute\.[a-zA-Z.]+"'
+            exit 1
+          fi
 
       - name: No firewall rule opens tcp:22 to 0.0.0.0/0
         working-directory: ${{ github.workspace }}
@@ -71,10 +93,19 @@ jobs:
                 blk=""
               }
             }
-          ' infra/firewall.tf)
+          ' infra/*.tf)
           if [ -n "$offenders" ]; then
             echo "::error::A google_compute_firewall rule allows tcp:22 from 0.0.0.0/0:"
             echo "$offenders"
+            exit 1
+          fi
+          # The opt-in var must not default to (or be committed as) the whole internet.
+          if grep -A6 'variable "operator_ssh_cidrs"' infra/variables.tf | grep -qE '0\.0\.0\.0/0'; then
+            echo "::error::operator_ssh_cidrs default must not contain 0.0.0.0/0."
+            exit 1
+          fi
+          if grep -qE '^\s*operator_ssh_cidrs\s*=.*0\.0\.0\.0/0' terraform.tfvars.example; then
+            echo "::error::terraform.tfvars.example sets operator_ssh_cidrs to 0.0.0.0/0."
             exit 1
           fi
 
