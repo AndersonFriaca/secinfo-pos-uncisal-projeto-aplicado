@@ -24,8 +24,7 @@ function failNtimes(n: number, now: number): RateLimitState {
 
 describe("recordLoginFailure — brute-force threshold (SEC-01, SEC-02)", () => {
   it("does not block on the 4th consecutive failure", () => {
-    let state = emptyState();
-    let decision = recordLoginFailure(state, T0);
+    let decision = recordLoginFailure(emptyState(), T0);
     for (let i = 0; i < 3; i++) {
       decision = recordLoginFailure(decision.state, T0);
     }
@@ -44,9 +43,8 @@ describe("recordLoginFailure — brute-force threshold (SEC-01, SEC-02)", () => 
   });
 
   it("uses the injected threshold, not a hardcoded 5", () => {
-    let state = emptyState();
     const config = { maxFailures: 3, blockMs: 10_000 };
-    const first = recordLoginFailure(state, T0, config);
+    const first = recordLoginFailure(emptyState(), T0, config);
     const second = recordLoginFailure(first.state, T0, config);
     const third = recordLoginFailure(second.state, T0, config);
     expect(first.blocked).toBe(false);
@@ -99,8 +97,7 @@ describe("block expiry — the 60-second boundary (SEC-05)", () => {
 
 describe("evaluateBucket — auth bucket, 10 req/min (SEC-25)", () => {
   it("allows the first 10 requests and rejects the 11th within the window", () => {
-    let state = emptyState();
-    let decision = evaluateBucket(state, "auth", T0);
+    let decision = evaluateBucket(emptyState(), "auth", T0);
     for (let i = 1; i < 10; i++) {
       decision = evaluateBucket(decision.state, "auth", T0 + i * 1000);
       expect(decision.allowed).toBe(true);
@@ -111,8 +108,7 @@ describe("evaluateBucket — auth bucket, 10 req/min (SEC-25)", () => {
   });
 
   it("allows again after the window rolls over", () => {
-    let state = emptyState();
-    let decision = evaluateBucket(state, "auth", T0);
+    let decision = evaluateBucket(emptyState(), "auth", T0);
     for (let i = 1; i < 11; i++) {
       decision = evaluateBucket(decision.state, "auth", T0 + 1000);
     }

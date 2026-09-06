@@ -277,16 +277,17 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] Reads/writes `rate_limits/{ip}` inside a Firestore transaction so concurrent requests cannot skip the threshold
-- [ ] An IP whose `blockedUntil` is cached and still in the future is rejected with **zero** store calls (assert the fake store records no read and no write)
-- [ ] Client IP resolution takes the left-most `X-Forwarded-For` entry and falls back to the socket address when the header is absent
-- [ ] A store failure during a **login** check propagates as an error (fail closed); a store failure in the `general` bucket resolves to allowed (fail open)
-- [ ] Unit tests use an injectable fake store that counts calls — asserting the L1 short-circuit, the transaction path, the fail-closed login branch, the fail-open general branch, and both IP-resolution branches
-- [ ] Quick gate passes
+- [x] Reads/writes `rate_limits/{ip}` inside a Firestore transaction so concurrent requests cannot skip the threshold
+- [x] An IP whose `blockedUntil` is cached and still in the future is rejected with **zero** store calls (assert the fake store records no read and no write)
+- [x] Client IP resolution takes the left-most `X-Forwarded-For` entry and falls back to the socket address when the header is absent
+- [x] A store failure during a **login** check propagates as an error (fail closed); a store failure in the `general` bucket resolves to allowed (fail open)
+- [x] Unit tests use an injectable fake store that counts calls — asserting the L1 short-circuit, the transaction path, the fail-closed login branch, the fail-open general branch, and both IP-resolution branches
+- [x] Quick gate passes
 
 **Tests**: unit
 **Gate**: Quick
 **Commit**: `feat(web): add firestore rate limit store with in-memory cache`
+**Status**: [x] Complete
 
 ---
 
