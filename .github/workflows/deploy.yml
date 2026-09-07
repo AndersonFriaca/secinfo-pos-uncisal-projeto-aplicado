@@ -132,23 +132,23 @@ jobs:
             rm -f /tmp/ecosystem-$SHA.js
             sudo ln -sfn /opt/app/releases/$SHA /opt/app/current"
 
-      - name: Write /opt/app/.env.production from secrets
+      - name: Write /opt/app/.env.production
         env:
           PROJECT: ${{ secrets.GCP_PROJECT_ID }}
           ZONE: ${{ secrets.GCP_ZONE }}
           SHA: ${{ github.sha }}
-          IDENTITY_PLATFORM_API_KEY: ${{ secrets.IDENTITY_PLATFORM_API_KEY }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
-          # Build the env file locally and copy it over the tunnel — the secret
-          # value never appears on a remote command line or in process args.
+          # No auth secret in here anymore: the Identity Platform API key lives in
+          # Secret Manager (infra/secrets.tf) and the app reads it at runtime with
+          # the VM service account. GOOGLE_CLOUD_PROJECT tells it which project's
+          # secret to read (and is also firebase-admin's ADC project).
           umask 077
           ENV_FILE="$(mktemp)"
           {
             echo "NODE_ENV=production"
             echo "PORT=3000"
-            echo "IDENTITY_PLATFORM_API_KEY=$IDENTITY_PLATFORM_API_KEY"
             echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT"
           } > "$ENV_FILE"
           GCLOUD="gcloud compute --quiet --project=$PROJECT"

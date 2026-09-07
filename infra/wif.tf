@@ -89,21 +89,21 @@ resource "google_service_account_iam_member" "deploy_wif" {
 #     to sshd entirely through Workload Identity Federation with no stored key.
 #   - roles/iam.serviceAccountUser on the VM's attached service account only:
 #     `iam.serviceAccounts.actAs` on that SA, which `gcloud compute` requires
-#     for the instance operations above. The VM has no explicit `service_account`
-#     block in compute.tf, so its attached identity is the project's default
-#     compute service account, built from the project number below.
-#     NOTE: if the operator later attaches an explicit service account to the
-#     VM, this binding's target MUST change to that service account.
+#     for the instance operations above. compute.tf attaches the project's
+#     default compute service account to the VM explicitly; it is the same
+#     identity used here, built from the project number below.
+#     NOTE: if the operator swaps the VM to a different service account, this
+#     binding's target MUST change to that service account.
 
 data "google_project" "this" {
   project_id = var.project_id
 }
 
 locals {
-  # The VM has no explicit service_account block in compute.tf, so it runs as
-  # the project's default compute SA. Built from the project number rather than
-  # read via google_compute_default_service_account so `terraform plan` does not
-  # depend on iam.googleapis.com being enabled yet (cloudresourcemanager, which
+  # The VM is attached to the project's default compute SA (compute.tf). Built
+  # from the project number rather than read via
+  # google_compute_default_service_account so `terraform plan` does not depend on
+  # iam.googleapis.com being enabled yet (cloudresourcemanager, which
   # google_project needs, is on by default).
   default_compute_sa = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
 }

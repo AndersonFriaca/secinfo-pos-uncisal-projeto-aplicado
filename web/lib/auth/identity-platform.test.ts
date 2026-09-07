@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  __resetApiKeyCache,
   sendVerificationEmail,
   signInWithPassword,
   signUp,
 } from "./identity-platform";
+import { accessSecretVersion } from "../gcp/secret";
+
+vi.mock("../gcp/secret", () => ({ accessSecretVersion: vi.fn() }));
+const accessSecretVersionMock = vi.mocked(accessSecretVersion);
 
 const API_KEY = "test-api-key-1234";
 
@@ -32,12 +37,16 @@ let errorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   process.env.IDENTITY_PLATFORM_API_KEY = API_KEY;
+  delete process.env.GOOGLE_CLOUD_PROJECT;
+  accessSecretVersionMock.mockReset();
+  __resetApiKeyCache();
   errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
   errorSpy.mockRestore();
   delete process.env.IDENTITY_PLATFORM_API_KEY;
+  delete process.env.GOOGLE_CLOUD_PROJECT;
 });
 
 describe("signUp (AUTH-01)", () => {
@@ -121,6 +130,7 @@ describe("signInWithPassword (AUTH-07, AUTH-10, AUTH-12)", () => {
     });
     expect(result).toEqual({ ok: false, reason: "unavailable" });
     expect(calls).toHaveLength(0);
+    expect(accessSecretVersionMock).not.toHaveBeenCalled();
   });
 
   it("never leaks the API key in the result or a log line", async () => {
@@ -132,6 +142,53 @@ describe("signInWithPassword (AUTH-07, AUTH-10, AUTH-12)", () => {
     for (const call of errorSpy.mock.calls) {
       expect(call.join(" ")).not.toContain(API_KEY);
     }
+  });
+});
+
+describe("API key from Secret Manager (AUTH-12)", () => {
+  beforeEach(() => {
+    delete process.env.IDENTITY_PLATFORM_API_KEY;
+    process.env.GOOGLE_CLOUD_PROJECT = "proj-x";
+  });
+
+  it("reads identity-platform-api-key and uses it as the ?key= value", async () => {
+    accessSecretVersionMock.mockResolvedValue("secret-key-abc\n");
+    const { impl, calls } = fakeFetch(200, { idToken: "i", localId: "l" });
+
+    const result = await signInWithPassword("u@example.com", "pw", {
+      fetchImpl: impl,
+    });
+
+    expect(result).toEqual({ ok: true, idToken: "i", localId: "l" });
+    expect(accessSecretVersionMock).toHaveBeenCalledWith(
+      "proj-x",
+      "identity-platform-api-key",
+    );
+    expect(calls[0].url).toBe(
+      "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=secret-key-abc",
+    );
+  });
+
+  it("caches the resolved key — one Secret Manager read across calls", async () => {
+    accessSecretVersionMock.mockResolvedValue("secret-key-abc");
+    const { impl } = fakeFetch(200, { idToken: "i", localId: "l" });
+
+    await signInWithPassword("a@example.com", "pw", { fetchImpl: impl });
+    await signInWithPassword("b@example.com", "pw", { fetchImpl: impl });
+
+    expect(accessSecretVersionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("degrades to unavailable if the Secret Manager read throws", async () => {
+    accessSecretVersionMock.mockRejectedValue(new Error("permission denied"));
+    const { impl, calls } = fakeFetch(200, {});
+
+    const result = await signInWithPassword("u@example.com", "pw", {
+      fetchImpl: impl,
+    });
+
+    expect(result).toEqual({ ok: false, reason: "unavailable" });
+    expect(calls).toHaveLength(0);
   });
 });
 

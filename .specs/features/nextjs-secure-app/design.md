@@ -58,7 +58,7 @@ graph TD
 | Nginx reverse proxy to `localhost:3000` | `infra/scripts/startup.sh.tpl` (stage 10) | Already points at the port this app will bind. No change needed beyond `server_tokens off`. |
 | PM2 + `pm2 startup` boot survival | `infra/scripts/startup.sh.tpl` (stage 9) | The app is registered with the existing PM2 instance; `pm2 save` makes it survive reboots. |
 | `infra/scripts/ecosystem.config.js` | Same | Already declares `name: nextjs-app`, `cwd: /opt/app`, `PORT: 3000`. Needs its `script`/`args` pointed at the standalone server. |
-| Terraform main root + provider config | `infra/*.tf` | New GCP resources (Firebase project, Identity Platform, WIF) are added here, reusing `user_project_override`/`billing_project` already set. `google-beta` is added to `required_providers` for `google_firebase_project`. |
+| Terraform main root + provider config | `infra/*.tf` | New GCP resources (Firebase project, Identity Platform, WIF, Secret Manager) are added here, reusing `user_project_override`/`billing_project` already set. `google-beta` is added to `required_providers` for `google_firebase_project`. |
 | VM start/stop with IP reservation | `ops/vm-start.sh`, `ops/vm-stop.sh` | Operator-only. The deploy workflow does **not** reproduce the reservation: when the VM is stopped it just runs `gcloud compute instances start`, waits for `RUNNING`, and reads the new ephemeral IP (CICD-04). The static-IP reservation stays here for the operator's stable-IP-for-a-session need. |
 | `.gitignore` secret patterns | `.gitignore` | Extended with `.env*` app-level entries; the existing rules already block `.env`, keys, and tfvars. |
 | Free-tier and teardown documentation | `docs/` | New app docs slot in beside them; the OWASP section lands in `README.md` per DOCS-01. |
@@ -67,8 +67,9 @@ graph TD
 
 | System | Integration |
 | --- | --- |
-| Identity Platform | Server-side REST over HTTPS with an API key held in `/opt/app/.env.production` (chmod 600), never in the repo or the bundle |
-| Firebase Admin SDK | Route Handlers only (session cookie mint/verify/revoke), using Application Default Credentials from the VM's service account |
+| Identity Platform | Server-side REST over HTTPS. The API key is read at runtime from Secret Manager (`identity-platform-api-key`) with the VM's service account — never in the repo, the bundle, a GitHub secret, or `.env.production`. Env var `IDENTITY_PLATFORM_API_KEY` overrides for local dev. |
+| Secret Manager | `web/lib/gcp/secret.ts` — one `:access` REST call via `google-auth-library`, ambient credentials, result cached per process |
+| Firebase Admin SDK | Route Handlers only (session cookie mint/verify/revoke), using Application Default Credentials from the VM's attached service account |
 | Nginx | Sets `X-Forwarded-For`; the app reads its left-most entry for client IP (SEC-06) |
 | GitHub Actions | WIF → short-lived GCP token → `gcloud` for IP resolution, VM start, and `compute scp`/`ssh --tunnel-through-iap` for the file transfer and remote commands. gcloud mints an ephemeral IAM-scoped SSH key from the deploy SA identity — no key stored anywhere. Remote file ops run under `sudo` (ephemeral login user in `google-sudoers`) and hand ownership to `appsvc`. |
 
@@ -129,7 +130,7 @@ graph TD
 
 ### `lib/auth/identity-platform.ts` — server-side REST client
 
-- **Purpose**: The only module that talks to Identity Platform. Keeps the API key in one place and normalises upstream errors into safe, generic results.
+- **Purpose**: The only module that talks to Identity Platform. Resolves the API key in one place (`IDENTITY_PLATFORM_API_KEY` env var → else Secret Manager `identity-platform-api-key` via `lib/gcp/secret.ts`, keyed by `GOOGLE_CLOUD_PROJECT`; cached per process, failures → `unavailable`) and normalises upstream errors into safe, generic results.
 - **Interfaces**:
   - `signUp(email, password): Promise<{ idToken: string; localId: string }>`
   - `signInWithPassword(email, password): Promise<{ idToken: string; localId: string }>`
@@ -186,11 +187,11 @@ Route protection is **not** delegated to `proxy.ts` — the Admin SDK cannot run
 /opt/app/
 ├── current -> releases/<sha>     # symlink flipped atomically on deploy
 ├── releases/<sha>/               # standalone bundle: server.js, .next/, public/
-├── .env.production               # chmod 600, written by the pipeline from GitHub secrets
-└── ecosystem.config.js
+├── .env.production               # chmod 600 — NODE_ENV / PORT / GOOGLE_CLOUD_PROJECT only, no secret
+└── ecosystem.config.js           # rewritten from the repo on every boot AND every deploy
 ```
 
-PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_ENV=production`, and `--env-file` pointed at `.env.production`. `/opt/app` and every `releases/<sha>` are owned by `appsvc`; the deploy writes them with `sudo install -o appsvc`.
+PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_ENV=production`, and `--env-file` pointed at `.env.production`. `/opt/app` and every `releases/<sha>` are owned by `appsvc`; the deploy writes them with `sudo install -o appsvc`. The Identity Platform API key is **not** in `.env.production` — the app reads it from Secret Manager (`identity-platform-api-key`) with the VM's service account, via `web/lib/gcp/secret.ts`.
 
 ### GitHub Actions workflows
 
@@ -198,17 +199,19 @@ PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_E
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | `pull_request` → `main` | checkout → setup-node 24 → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` (TEST-02, TEST-03) |
 | `.github/workflows/release.yml` | `push` → `main` | `release-please` maintains the release PR; on a PR merge that cuts a release (`releases_created == true`) it calls `deploy.yml` (CICD-09, AD-008) |
-| `.github/workflows/deploy.yml` | `workflow_call` from `release.yml` (+ `workflow_dispatch` for a manual redeploy) — **not** on every push to `main` | `npm ci` → test → `next build` → `google-github-actions/auth` (WIF) → resolve IP / start VM if `TERMINATED` → `gcloud compute scp --tunnel-through-iap` bundle → copy `.env.production` from secrets over the tunnel (`install -m 600 -o appsvc`) → `pm2 reload` as `appsvc` → poll `https://<ip>/` for 200, 2-minute timeout (CICD-01..08) |
+| `.github/workflows/deploy.yml` | `workflow_call` from `release.yml` (+ `workflow_dispatch` for a manual redeploy) — **not** on every push to `main` | `npm ci` → test → `next build` → `google-github-actions/auth` (WIF) → resolve IP / start VM if `TERMINATED` → `gcloud compute scp --tunnel-through-iap` bundle + `ecosystem.config.js` → write non-secret `.env.production` over the tunnel (`install -m 600 -o appsvc`) → `pm2 delete` + `pm2 start` as `appsvc` → poll `https://<ip>/` for 200, 2-minute timeout (CICD-01..08) |
 
-**Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`. `GCP_REGION` is no longer consumed — dropping the static-IP reservation removed the only region-scoped call. No SSH key or SSH-user secret — VM access is entirely through the WIF-federated deploy SA over an IAP tunnel.
+**Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`. No `IDENTITY_PLATFORM_API_KEY` secret — the running app reads that key from Secret Manager with the VM's service account. `GCP_REGION` is not consumed either. No SSH key or SSH-user secret — VM access is entirely through the WIF-federated deploy SA over an IAP tunnel.
 
-### Terraform additions — `infra/app.tf`, `infra/firebase.tf`, `infra/wif.tf`
+### Terraform additions — `infra/app.tf`, `infra/firebase.tf`, `infra/secrets.tf`, `infra/compute.tf`, `infra/wif.tf`
 
 | Resource | Purpose |
 | --- | --- |
-| `google_project_service` | `identitytoolkit`, `firebase`, `iam`, `iamcredentials`, `sts`, `iap`, `apikeys` — no `firestore` (TF-01) |
+| `google_project_service` | `identitytoolkit`, `firebase`, `iam`, `iamcredentials`, `sts`, `iap`, `apikeys`, `secretmanager` — no `firestore` (TF-01) |
 | `google_firebase_project` (google-beta) | Marks the project as Firebase-enabled (TF-02) |
 | `google_identity_platform_config` | `sign_in.email.enabled = true`, `password_required = true` (TF-02) |
+| `google_apikeys_key` + `google_secret_manager_secret` / `..._version` / `..._iam_member` (`infra/secrets.tf`) | The Identity Platform key, restricted to `identitytoolkit.googleapis.com`, mirrored into secret `identity-platform-api-key`; VM SA gets `roles/secretmanager.secretAccessor` on that secret only. App reads it at runtime — no GitHub secret, no `.env.production` line (TF-06) |
+| `service_account` block on `google_compute_instance.vm` (`infra/compute.tf`) | Attaches the default compute SA explicitly with `cloud-platform` scope, so the metadata server can mint tokens for firebase-admin ADC and the Secret Manager read |
 | `google_iam_workload_identity_pool` + `..._provider` | GitHub OIDC (`issuer_uri = "https://token.actions.githubusercontent.com"`), `attribute_mapping` for `google.subject`/`attribute.repository`/`attribute.repository_owner`, and an `attribute_condition` restricting to this repository (TF-04) |
 | `google_service_account` + `google_service_account_iam_member` / `google_compute_instance_iam_member` / `google_iap_tunnel_instance_iam_member` / `google_project_iam_custom_role` + `google_project_iam_member` | Deploy SA bound with `roles/iam.workloadIdentityUser` to the `principalSet://` for this repo; `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor` scoped to `google_compute_instance.vm` only; `roles/iam.serviceAccountUser` scoped to the VM's attached (default compute) service account only; one minimal custom project role `deployVmOperator` (compute read/list + operation-get only). No predefined project role, never `roles/owner`/`roles/editor` (TF-05) |
 | `google_compute_firewall` `allow-iap-ssh` (in `infra/firewall.tf`, alongside the existing rules) + `iap.googleapis.com` service | `tcp:22` from the IAP range `35.235.240.0/20` to `web-server`-tagged instances — the ingress path for the keyless deploy. Additive: `allow-ssh` still opens `:22` to `var.operator_ssh_cidrs` (default `0.0.0.0/0`, for the evaluation board; key-only + Fail2Ban regardless). |
@@ -281,6 +284,8 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 | CSP strategy | Per-request nonce with `'strict-dynamic'`, forcing dynamic rendering | The spec forbids `'unsafe-inline'`; nonce is the approach Next.js documents, and SSR is required anyway so the cost is already paid |
 | Rate-limit store | Process-local in-memory `Map` + in-process L1 block cache (AD-009) | User chose the in-memory store; Firestore removed entirely (resource, API, adapter) to cut dependencies. Single VM instance, 60s blocks — durability across restarts is not worth a database |
 | Firebase Auth provisioning | `google_firebase_project` (google-beta) + `google_identity_platform_config` | User chose a full Firebase project, not just the Identity Platform config. `google-beta` is added to `required_providers` for this one resource; every other resource stays on the GA `google` provider |
+| Identity Platform API key delivery | Secret Manager, read at runtime by the VM's service account (`roles/secretmanager.secretAccessor` on the one secret) | User asked for the key out of `.env` and out of GitHub secrets. One secret, one narrowly-scoped grant; rotation is a new secret version the app picks up on its next cold read. REST `:access` via `google-auth-library` (already in the tree) instead of the full client library |
+| VM service account | Default compute SA, attached explicitly with `cloud-platform` scope | It had no attached identity before — which also broke firebase-admin ADC. A dedicated minimal SA is cleaner but expands the WIF/`serviceAccountUser` wiring; out of scope for coursework |
 | Login failure mode when the store is down | Fail closed (503) | A login form that stays up without brute-force protection is worse than one that is briefly unavailable |
 | Error message policy | One generic message for every credential failure, and for every signup rejection | Prevents account enumeration (OWASP Identification and Authentication Failures) |
 | Build location | GitHub Actions, deploying a `standalone` bundle | 1 GB RAM on the VM makes on-host builds slow and OOM-prone |

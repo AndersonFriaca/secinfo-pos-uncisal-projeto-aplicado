@@ -12,11 +12,12 @@ npm ci
 
 # 1. env local (gitignored)
 cp .env.local.example .env.local
-# preencha IDENTITY_PLATFORM_API_KEY:
+# preencha GOOGLE_CLOUD_PROJECT = project_id do infra/terraform.tfvars
+# IDENTITY_PLATFORM_API_KEY é opcional: sem ele o app lê a key do Secret
+# Manager via ADC (mesmo caminho da produção). Para setar mesmo assim:
 terraform -chdir=../infra output -raw identity_platform_api_key
-# e GOOGLE_CLOUD_PROJECT = project_id do infra/terraform.tfvars
 
-# 2. Application Default Credentials para o firebase-admin (mint/verify do cookie)
+# 2. Application Default Credentials (firebase-admin + leitura do Secret Manager)
 gcloud auth application-default login
 gcloud auth application-default set-quota-project <project-id>
 
@@ -26,8 +27,8 @@ npm run dev
 
 Abra [http://localhost:3000](http://localhost:3000). Fluxo de validação:
 cadastro → e-mail de verificação (Identity Platform envia) → login → `/dashboard`
-→ logout. Sem a API key, `/api/auth/*` responde 503; sem ADC, o login falha ao
-criar o cookie de sessão.
+→ logout. Sem a API key (nem env nem Secret Manager), `/api/auth/*` responde
+503; sem ADC, o login falha ao criar o cookie de sessão.
 
 `npm test` / `npm run lint` / `npm run typecheck` / `npm run build` rodam sem
 credencial nenhuma.

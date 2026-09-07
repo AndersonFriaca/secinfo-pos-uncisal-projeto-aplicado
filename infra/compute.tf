@@ -43,6 +43,21 @@ resource "google_compute_instance" "vm" {
     enable_integrity_monitoring = true
   }
 
+  # Attach the project's default compute service account explicitly (it was
+  # implicit before). Two runtime needs depend on the instance actually having
+  # an identity the metadata server can mint tokens for:
+  #   - firebase-admin's applicationDefault() in web/lib/auth/session.ts, which
+  #     verifies the session cookie on every dashboard request;
+  #   - reading the Identity Platform API key from Secret Manager (secrets.tf).
+  # cloud-platform scope + narrowly-scoped IAM roles (only secretAccessor on the
+  # one secret is added here) is the standard pattern; the legacy per-API scopes
+  # cannot express "Secret Manager read". local.default_compute_sa is the same
+  # SA the WIF bindings in wif.tf already target, so nothing there changes.
+  service_account {
+    email  = local.default_compute_sa
+    scopes = ["cloud-platform"]
+  }
+
   metadata = {
     ssh-keys = "${var.ssh_username}:${file(var.ssh_public_key_path)}"
     # Force `gcloud compute ssh` (the keyless CI deploy path) to publish its

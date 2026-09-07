@@ -21,6 +21,9 @@ locals {
     # API Keys API: lets Terraform provision the Identity Platform browser API
     # key below instead of the operator creating one by hand in the console.
     "apikeys.googleapis.com",
+    # Secret Manager: stores that API key (secrets.tf); the VM's service account
+    # reads it at runtime instead of the value living in /opt/app/.env.production.
+    "secretmanager.googleapis.com",
   ]
 }
 
@@ -62,8 +65,10 @@ resource "google_identity_platform_config" "default" {
 # the VM and GitHub-hosted runners, whose egress IPs are not fixed. The key is
 # server-held per AD-004 — never shipped to the browser.
 #
-# The key string is stored in Terraform state (the private GCS state bucket).
-# Read it with: terraform -chdir=infra output -raw identity_platform_api_key
+# The key string is stored in Terraform state (the private GCS state bucket) and
+# mirrored into Secret Manager (secrets.tf), which is where the running app
+# reads it from. Read it directly with:
+#   terraform -chdir=infra output -raw identity_platform_api_key
 resource "google_apikeys_key" "identity_platform" {
   project      = var.project_id
   name         = "identity-platform-server"

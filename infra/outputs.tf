@@ -14,7 +14,7 @@ output "deploy_service_account_email" {
 }
 
 output "identity_platform_api_key" {
-  description = "Identity Platform browser API key the app uses server-side (GitHub secret IDENTITY_PLATFORM_API_KEY / /opt/app/.env.production). Read with: terraform -chdir=infra output -raw identity_platform_api_key"
+  description = "Identity Platform API key the app uses server-side. In production the app reads it from Secret Manager (secret 'identity-platform-api-key'); this output is for local dev (web/.env.local) and debugging. Read with: terraform -chdir=infra output -raw identity_platform_api_key"
   value       = google_apikeys_key.identity_platform.key_string
   sensitive   = true
 }

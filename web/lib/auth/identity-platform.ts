@@ -1,16 +1,26 @@
 /**
  * The only module that talks to Google Identity Platform.
  *
- * It holds the API key (server-only env var `IDENTITY_PLATFORM_API_KEY`) in one
- * place and collapses every upstream error into a safe, generic result so a
- * caller cannot use the response to enumerate accounts. The key never appears
- * in a thrown error, a log line, or a returned value.
+ * It resolves the API key in one place and collapses every upstream error into
+ * a safe, generic result so a caller cannot use the response to enumerate
+ * accounts. The key never appears in a thrown error, a log line, or a returned
+ * value.
+ *
+ * Key resolution order (first hit wins, then cached for the process):
+ *   1. `IDENTITY_PLATFORM_API_KEY` env var — used for local dev.
+ *   2. Secret Manager secret `identity-platform-api-key` in the project named
+ *      by `GOOGLE_CLOUD_PROJECT`, read with the ambient service-account
+ *      credentials (infra/secrets.tf grants the VM's SA read access).
  *
  * Requirements: AUTH-01, AUTH-03, AUTH-04, AUTH-07, AUTH-10, AUTH-12.
  */
 
+import { accessSecretVersion } from "../gcp/secret";
+
 const ACCOUNTS_ENDPOINT =
   "https://identitytoolkit.googleapis.com/v1/accounts";
+
+const API_KEY_SECRET_ID = "identity-platform-api-key";
 
 type FetchImpl = typeof fetch;
 
@@ -30,9 +40,37 @@ export type AuthSuccess = { ok: true; idToken: string; localId: string };
 export type AuthResult = AuthSuccess | IdentityFailure;
 export type SendEmailResult = { ok: true } | IdentityFailure;
 
-function readApiKey(): string | null {
-  const key = process.env.IDENTITY_PLATFORM_API_KEY;
-  return key && key.length > 0 ? key : null;
+let cachedApiKey: string | undefined;
+
+/** Test-only: drop the resolved-key cache between cases. */
+export function __resetApiKeyCache(): void {
+  cachedApiKey = undefined;
+}
+
+async function resolveApiKey(): Promise<string | null> {
+  if (cachedApiKey) {
+    return cachedApiKey;
+  }
+
+  const fromEnv = process.env.IDENTITY_PLATFORM_API_KEY?.trim();
+  if (fromEnv) {
+    cachedApiKey = fromEnv;
+    return fromEnv;
+  }
+
+  const project = process.env.GOOGLE_CLOUD_PROJECT?.trim();
+  if (!project) {
+    return null;
+  }
+
+  const fromSecret = (
+    await accessSecretVersion(project, API_KEY_SECRET_ID)
+  )?.trim();
+  if (fromSecret) {
+    cachedApiKey = fromSecret;
+    return fromSecret;
+  }
+  return null;
 }
 
 function unavailable(method: string, detail: string): IdentityFailure {
@@ -46,7 +84,14 @@ async function callIdentityPlatform(
   body: Record<string, unknown>,
   fetchImpl: FetchImpl,
 ): Promise<{ status: number; body: unknown } | IdentityFailure> {
-  const key = readApiKey();
+  let key: string | null;
+  try {
+    key = await resolveApiKey();
+  } catch {
+    // A Secret Manager auth/permission/transport failure must not surface —
+    // the error object could carry the secret resource name or a token.
+    return unavailable(method, "API key not configured");
+  }
   if (!key) {
     return unavailable(method, "API key not configured");
   }
