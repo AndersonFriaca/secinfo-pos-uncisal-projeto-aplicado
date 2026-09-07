@@ -252,7 +252,14 @@ ${ecosystem_config}
 EOF
 chown appsvc:appsvc /opt/app/ecosystem.config.js
 
-if [ -f "$HTTPS_SITE" ] && grep -qF "# managed-by-terraform: proxy-placeholder" "$HTTPS_SITE"; then
+# Write the reverse-proxy vhost when the file is still the stage-7 placeholder,
+# OR when it is a proxy vhost that predates the X-Forwarded-Proto headers below
+# (without which proxy.ts 403s every state-changing /api/* request). The cert
+# path is already kept fresh by stage 7, so $PUBLIC_IP is current here.
+if [ -f "$HTTPS_SITE" ] && \
+   { grep -qF "# managed-by-terraform: proxy-placeholder" "$HTTPS_SITE" || \
+     { grep -qF "# managed-by-terraform: nextjs-reverse-proxy" "$HTTPS_SITE" && \
+       ! grep -qF "X-Forwarded-Proto" "$HTTPS_SITE"; }; }; then
   cat > "$HTTPS_SITE" <<EOF
 # managed-by-terraform: https site
 server {
@@ -270,6 +277,13 @@ server {
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
+        # The app derives its own origin (proxy.ts same-origin / CSRF check) and
+        # the client IP (rate limiter) from these — without them Next sees
+        # scheme http + host localhost:3000 and every POST /api/* is a 403.
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP \$remote_addr;
         proxy_cache_bypass \$http_upgrade;
     }
 }
