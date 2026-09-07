@@ -1,24 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+App Next.js 16 (App Router, SSR) do projeto. Auth server-side via Firebase /
+Identity Platform; rate limiting em memória.
 
-## Getting Started
+## Rodar localmente
 
-First, run the development server:
+Pré-requisitos: Node 24, `gcloud` autenticado, `infra/` já aplicado (a API key
+existe no state).
 
 ```bash
+cd web
+npm ci
+
+# 1. env local (gitignored)
+cp .env.local.example .env.local
+# preencha IDENTITY_PLATFORM_API_KEY:
+terraform -chdir=../infra output -raw identity_platform_api_key
+# e GOOGLE_CLOUD_PROJECT = project_id do infra/terraform.tfvars
+
+# 2. Application Default Credentials para o firebase-admin (mint/verify do cookie)
+gcloud auth application-default login
+gcloud auth application-default set-quota-project <project-id>
+
+# 3. subir
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra [http://localhost:3000](http://localhost:3000). Fluxo de validação:
+cadastro → e-mail de verificação (Identity Platform envia) → login → `/dashboard`
+→ logout. Sem a API key, `/api/auth/*` responde 503; sem ADC, o login falha ao
+criar o cookie de sessão.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`npm test` / `npm run lint` / `npm run typecheck` / `npm run build` rodam sem
+credencial nenhuma.
 
 ## Learn More
 
