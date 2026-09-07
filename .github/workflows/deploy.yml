@@ -1,8 +1,11 @@
 name: Deploy
 
+# Not triggered on every push to main. Runs only when the Release workflow
+# (release-please) actually cuts a vX.Y.Z release, which calls this workflow.
+# workflow_dispatch is kept for a manual redeploy of the current main.
 on:
-  push:
-    branches: [main]
+  workflow_call:
+  workflow_dispatch:
 
 concurrency:
   group: deploy-main

@@ -58,7 +58,7 @@ infra/bootstrap/   Persistent Terraform root: state bucket, billing budget
 infra/             Main Terraform root: VPC, firewall, compute instance
 infra/scripts/     Startup script + PM2 config, rendered onto the VM
 ops/               Operator scripts (start/stop the VM with a static IP)
-.github/workflows/ CI (tests on PR) and deploy (on merge to main) pipelines
+.github/workflows/ CI (tests on PR), release-please (semver tags), deploy (on release only)
 docs/              Full documentation — start here
 .specs/            Planning history: requirements, design, tasks, verification report
 CLAUDE.md          Operating notes for AI agents working in this repo

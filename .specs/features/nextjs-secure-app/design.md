@@ -198,7 +198,8 @@ PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_E
 | Workflow | Trigger | Steps |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | `pull_request` → `main` | checkout → setup-node 24 → `npm ci` → `npm run lint` → `npm run typecheck` → `npm test` (TEST-02, TEST-03) |
-| `.github/workflows/deploy.yml` | `push` → `main` | `npm ci` → test → `next build` → `google-github-actions/auth` (WIF) → resolve IP / start VM if `TERMINATED` → `gcloud compute scp --tunnel-through-iap` bundle → copy `.env.production` from secrets over the tunnel (`install -m 600 -o appsvc`) → `pm2 reload` as `appsvc` → poll `https://<ip>/` for 200, 2-minute timeout (CICD-01..08) |
+| `.github/workflows/release.yml` | `push` → `main` | `release-please` maintains the release PR; on a PR merge that cuts a release (`release_created == true`) it calls `deploy.yml` (CICD-09, AD-008) |
+| `.github/workflows/deploy.yml` | `workflow_call` from `release.yml` (+ `workflow_dispatch` for a manual redeploy) — **not** on every push to `main` | `npm ci` → test → `next build` → `google-github-actions/auth` (WIF) → resolve IP / start VM if `TERMINATED` → `gcloud compute scp --tunnel-through-iap` bundle → copy `.env.production` from secrets over the tunnel (`install -m 600 -o appsvc`) → `pm2 reload` as `appsvc` → poll `https://<ip>/` for 200, 2-minute timeout (CICD-01..08) |
 
 **Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`. `GCP_REGION` is no longer consumed — dropping the static-IP reservation removed the only region-scoped call. No SSH key or SSH-user secret — VM access is entirely through the WIF-federated deploy SA over an IAP tunnel.
 

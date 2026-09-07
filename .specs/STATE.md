@@ -157,17 +157,28 @@ annotated tag and the Release. Config: `release-please-config.json`
 (`release-type: node`, `include-component-in-tag: false` so tags are bare
 `vX.Y.Z`, `bootstrap-sha` pinned to `3cbc1e3` so the first release only counts
 commits after the CI/CD work) + `.release-please-manifest.json` (`{"web":
-"0.1.0"}`). Needs `contents: write` + `pull-requests: write`; uses the default
-`GITHUB_TOKEN`.
+"0.1.0"}`). Needs `contents: write` + `pull-requests: write` + `id-token: write`
+(the last for the called deploy); uses the default `GITHUB_TOKEN`.
+
+**Deploy is gated on release.** `deploy.yml` no longer triggers on `push` to
+`main` — its trigger is `workflow_call` (+ `workflow_dispatch` for a manual
+redeploy). `release.yml` calls it (`uses: ./.github/workflows/deploy.yml`,
+`secrets: inherit`) from a `deploy` job gated on
+`needs.release-please.outputs.release_created == 'true'`. So a merge to `main`
+deploys **only** when it cuts a `vX.Y.Z` release — not on every push, and the
+old "push to main → deploy, then release PR merge → deploy again" double-fire
+is gone.
 
 **Why**: the repo already validates commit messages against the Conventional
 Commits grammar (`check_commit.py`), so the version bump is fully derivable —
-manual bumps are error-prone and the PRD's CI/CD axis is graded. The tag push
-also re-triggers `deploy.yml` like any other push to `main`.
+manual bumps are error-prone and the PRD's CI/CD axis is graded. Tying deploy
+to the release (not the push) means what is on the VM always matches a tagged
+version.
 
 **Consequence**: `web/package.json` `version` is release-please's to own — do
 not edit it manually. The release PR itself passes `ci.yml` (only touches
-package.json/CHANGELOG/manifest).
+package.json/CHANGELOG/manifest). Nothing reaches the VM until a release PR is
+merged (or `Deploy` is run manually via `workflow_dispatch`).
 
 ## Handoff
 
@@ -184,7 +195,7 @@ package.json/CHANGELOG/manifest).
 
 **Amendment 2 fix round 2 (validation.md G6 + guard hardening)**: `infra/compute.tf` sets `metadata["block-project-ssh-keys"] = "TRUE"` so `gcloud compute ssh` writes its ephemeral key to *instance* metadata (covered by the instance-scoped `compute.instances.setMetadata`) instead of needing a project-wide metadata write the deploy SA does not hold (G6, second P0). `ci.yml` `iac-guardrails` hardened: the `deploy_vm_operator` binding must reference the custom-role id (not a `roles/` literal), the custom role's permission list must carry no mutating verb, and the custom-role permission list is checked with an allowlist (`.get`/`.list` only) (closes evasions S6/S10). Guards exercised against synthetic offenders — all bite. (The `:22`/`operator_ssh_cidrs` firewall guards were later removed when public `:22` was deliberately reopened for the evaluation board.) Commits `9f11dc5`, `f631ef7`, + this doc commit. Re-verification: G2–G5 fully closed, G1 closed on shape, G6 the remaining item now fixed.
 
-**Amendment 3 (AD-008, semver releases)**: new `.github/workflows/release.yml` runs `googleapis/release-please-action@v4` on push to `main`; `release-please-config.json` + `.release-please-manifest.json` at repo root. Conventional-Commit-driven `vX.Y.Z` tags + GitHub Releases + `web/CHANGELOG.md`, zero manual version bumps. `spec.md` CICD story gains AC 9 + `CICD-09`. Gates: both new JSON files parse, `release.yml` parses as YAML, `validate_spec`/`validate_state` exit 0, `web/` untouched.
+**Amendment 3 (AD-008, semver releases + deploy-on-release)**: new `.github/workflows/release.yml` runs `googleapis/release-please-action@v4` on push to `main`; `release-please-config.json` + `.release-please-manifest.json` at repo root. Conventional-Commit-driven `vX.Y.Z` tags + GitHub Releases + `web/CHANGELOG.md`, zero manual version bumps. `deploy.yml` trigger changed from `push: main` to `workflow_call` (+ `workflow_dispatch`); `release.yml` calls it from a `deploy` job gated on `release_created` — deploy fires once, only on a release, no more double-fire. `spec.md` CICD story AC 1 + AC 9 reworded, `CICD-09` added; `design.md` workflow table updated. Gates: both new JSON files parse, all three workflows parse as YAML, `validate_spec`/`validate_state` exit 0, `web/` untouched.
 
 ### Operator: still-open live items
 - `terraform apply` the new `infra/` resources (custom role `deployVmOperator` included), then `terraform output` for the two GitHub secrets. First real deploy is the true test of the IAP permission set — same "only-found-live" class as the two `startup.sh.tpl` bugs in `CLAUDE.md`.
@@ -199,7 +210,7 @@ package.json/CHANGELOG/manifest).
 2. **`terraform apply` the new resources.** In `infra/`: applies `google_project_service` (identitytoolkit, firestore, iam, iamcredentials, sts, iap, apikeys), `google_identity_platform_config`, `google_apikeys_key` (the Identity Platform API key, restricted to `identitytoolkit.googleapis.com`), `google_firestore_database` (Native, `us-east1`), the Workload Identity pool/provider, and the `allow-iap-ssh` firewall rule. If the `apikeys` API was just enabled, `google_apikeys_key` may fail on the first apply with a propagation error — re-run `terraform apply` once. The deploy SA's `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor` are **instance-scoped** (`google_compute_instance_iam_member` / `google_iap_tunnel_instance_iam_member` on `app-vm`) and `roles/iam.serviceAccountUser` is scoped to the VM's default compute SA — the deploy SA gets no project-level role. Verify the `principalSet://` member resolved to this repo, and that `gcloud projects get-iam-policy` shows no deploy-SA binding.
    - **Public `:22` stays open** (`allow-ssh` from `operator_ssh_cidrs`, default `["0.0.0.0/0"]`) so the evaluation board can SSH in directly — key-only + Fail2Ban (4/24h) per PRD Eixo 1. Narrow `operator_ssh_cidrs` in `terraform.tfvars` to harden. `gcloud compute ssh <user>@app-vm --tunnel-through-iap` also works for principals with `roles/iap.tunnelResourceAccessor`.
 3. **Rebuild the VM for Node 24 + `appsvc`.** The updated `startup.sh.tpl` only takes effect on a fresh boot / instance recreation. It now also provisions the locked `appsvc` user that owns `/opt/app` and runs PM2. After it runs, confirm `node --version` reports `v24.x`, `pm2 list` works, `systemctl status pm2-appsvc` is active, `test -w /opt/app` as `appsvc`, and `curl -sI https://<ip>/ | grep -i '^server:'` shows no version.
-4. **Merge to `main`** to trigger `deploy.yml`: WIF auth (no key), dynamic IP resolution, `gcloud compute scp/ssh --tunnel-through-iap` (ephemeral SSH key, no stored key), bundle to `/opt/app/releases/<sha>` via `sudo install -o appsvc`, `current` symlink flip, `.env.production` copied chmod 600 owned by `appsvc`, PM2 reload as `appsvc`, health poll to HTTP 200.
+4. **Merge to `main`, then merge the `release-please` PR** it opens — the release PR merge is what cuts the `vX.Y.Z` tag and (via `release.yml` calling `deploy.yml`) triggers the deploy. A plain push to `main` no longer deploys; `workflow_dispatch` on `Deploy` forces a manual redeploy. The deploy itself: WIF auth (no key), dynamic IP resolution, `gcloud compute scp/ssh --tunnel-through-iap` (ephemeral SSH key, no stored key), bundle to `/opt/app/releases/<sha>` via `sudo install -o appsvc`, `current` symlink flip, `.env.production` copied chmod 600 owned by `appsvc`, PM2 reload as `appsvc`, health poll to HTTP 200.
 5. **Run every "Independent Test" in `spec.md`** against the live VM: landing page 200 + no `NEXT_PUBLIC_`/Firebase config in HTML; signup weak/strong password; login byte-identical failures + `Set-Cookie` attributes + no client-bundle Identity Platform reference; dashboard 303 without cookie / 200 with / 303 after logout-replay; six failed logins → 429 `Retry-After: 60` with the 6th never reaching Identity Platform; `curl -sI` full OWASP header set + absence checks + foreign-`Origin` 403; PR shows a red check on a broken assertion; merge produces a green deploy with a dynamic IP and a 200 health poll; `terraform destroy` then `apply` round-trips.
 
 **Branch**: `main`.

@@ -23,7 +23,8 @@ do cliente.
 | Workflow | Gatilho | O que faz |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | pull request para `main` | `npm ci`, lint, typecheck, testes unitários, e guardrails estáticos de IAM/firewall do `infra/` |
-| `.github/workflows/deploy.yml` | push para `main` | testes, build standalone, autenticação GCP sem chave (Workload Identity Federation), resolve/inicia a VM, envia o bundle e roda comandos remotos por um túnel IAP (`gcloud compute scp/ssh --tunnel-through-iap`), escreve `/opt/app/.env.production`, recarrega o PM2 como `appsvc`, faz poll de `https://<ip>/` esperando HTTP 200 |
+| `.github/workflows/release.yml` | push para `main` | `release-please`: mantém o PR de release (bump semver por Conventional Commits, `web/CHANGELOG.md`); ao mergear o PR cria a tag `vX.Y.Z` + GitHub Release e chama o `deploy.yml` |
+| `.github/workflows/deploy.yml` | `workflow_call` do `release.yml` (+ `workflow_dispatch`) — não em todo push | testes, build standalone, autenticação GCP sem chave (Workload Identity Federation), resolve/inicia a VM, envia o bundle e roda comandos remotos por um túnel IAP (`gcloud compute scp/ssh --tunnel-through-iap`), escreve `/opt/app/.env.production`, recarrega o PM2 como `appsvc`, faz poll de `https://<ip>/` esperando HTTP 200 |
 
 O workflow de deploy não guarda nenhuma chave GCP de longa duração **nem
 chave SSH**: ele autentica pelo pool de Workload Identity provisionado em

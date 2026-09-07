@@ -10,7 +10,9 @@ name: Release
 #   fix: ...             -> patch bump
 #   feat!: / BREAKING CHANGE: footer -> major bump
 #
-# The tag push then triggers deploy.yml like any other push to main.
+# A deploy to the VM happens ONLY when that PR merge produces a release —
+# the deploy job below calls .github/workflows/deploy.yml, gated on
+# release_created. Plain pushes to main do not deploy.
 
 on:
   push:
@@ -19,6 +21,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 concurrency:
   group: release-please
@@ -28,8 +31,22 @@ jobs:
   release-please:
     name: release PR / tag
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
+        id: rp
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  deploy:
+    name: deploy released version to the VM
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

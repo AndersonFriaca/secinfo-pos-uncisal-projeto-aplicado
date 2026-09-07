@@ -100,7 +100,10 @@ na mão**. O fluxo:
    `chore(main): release X.Y.Z` que sobe `web/package.json` e
    `web/CHANGELOG.md`.
 3. Fazer merge desse PR cria a tag anotada `vX.Y.Z` e o GitHub Release com as
-   notas do changelog. O push da tag re-dispara `deploy.yml`.
+   notas do changelog — e **só esse merge** dispara o deploy na VM
+   (`release.yml` chama `deploy.yml`, gated em `release_created`). Um push
+   comum em `main` não faz deploy; `workflow_dispatch` no workflow `Deploy`
+   força um redeploy manual do `main` atual.
 
 `bootstrap-sha` em `release-please-config.json` fixa `3cbc1e3` como ponto de
 partida — a primeira release só conta commits depois do trabalho de CI/CD.
