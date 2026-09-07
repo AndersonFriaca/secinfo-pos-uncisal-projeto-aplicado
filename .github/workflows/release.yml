@@ -1,0 +1,35 @@
+name: Release
+
+# Semver tags + GitHub Releases, driven by Conventional Commits (the same
+# feat/fix/... convention the repo already enforces on commit messages).
+#
+# release-please maintains one open "release PR" that bumps web/package.json
+# and web/CHANGELOG.md from the commits landed on main since the last release.
+# Merging that PR is what creates the tag (vX.Y.Z) and the GitHub Release:
+#   feat: ...            -> minor bump
+#   fix: ...             -> patch bump
+#   feat!: / BREAKING CHANGE: footer -> major bump
+#
+# The tag push then triggers deploy.yml like any other push to main.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release PR / tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

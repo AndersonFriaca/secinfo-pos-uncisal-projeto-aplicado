@@ -142,6 +142,33 @@ board can connect directly — PRD Eixo 1 requires key-only SSH + Fail2Ban
 service account is ever attached to the VM, the `roles/iam.serviceAccountUser`
 binding target must move to it.
 
+### AD-008 — Semver releases driven by Conventional Commits (release-please)
+
+**Status**: active
+**Feature**: `nextjs-secure-app`
+
+Version tags (`vX.Y.Z`) and GitHub Releases are produced by
+`googleapis/release-please-action@v4` (`.github/workflows/release.yml`), not by
+hand and not by the deploy job. On every push to `main` it maintains one open
+"release PR" that bumps `web/package.json` + `web/CHANGELOG.md` from the
+Conventional Commit types already enforced on commit messages (`feat` → minor,
+`fix` → patch, `feat!`/`BREAKING CHANGE` → major). Merging that PR creates the
+annotated tag and the Release. Config: `release-please-config.json`
+(`release-type: node`, `include-component-in-tag: false` so tags are bare
+`vX.Y.Z`, `bootstrap-sha` pinned to `3cbc1e3` so the first release only counts
+commits after the CI/CD work) + `.release-please-manifest.json` (`{"web":
+"0.1.0"}`). Needs `contents: write` + `pull-requests: write`; uses the default
+`GITHUB_TOKEN`.
+
+**Why**: the repo already validates commit messages against the Conventional
+Commits grammar (`check_commit.py`), so the version bump is fully derivable —
+manual bumps are error-prone and the PRD's CI/CD axis is graded. The tag push
+also re-triggers `deploy.yml` like any other push to `main`.
+
+**Consequence**: `web/package.json` `version` is release-please's to own — do
+not edit it manually. The release PR itself passes `ci.yml` (only touches
+package.json/CHANGELOG/manifest).
+
 ## Handoff
 
 **Feature**: `nextjs-secure-app` — **COMPLETE**. Execute done (T1-T30, 5 sequential sub-agent batches), independent Verifier **PASS** on re-verification 1/3, minor residual gaps R1/R3 cleaned up.
@@ -156,6 +183,8 @@ binding target must move to it.
 **Amendment 2 follow-up fixes (validation.md G1–G5)**: `infra/wif.tf` adds custom project role `deployVmOperator` (`compute.projects.get`, `compute.instances.list`, `compute.zoneOperations.get`, `compute.globalOperations.get` — read/list/operations-get only) bound to the deploy SA via `google_project_iam_member`, because `gcloud ... --tunnel-through-iap` / `instances start` / `instances describe` need project-scoped reads an instance binding cannot grant (G1, the P0). Spec/design/tasks reworded from "no project-level role" to "no predefined project role + one minimal custom role" (G2); one-line supersede notes added to the shipped `gcp-infra-terraform` spec/design/tasks. `.github/workflows/ci.yml` gains a credential-free `iac-guardrails` job asserting no predefined project IAM binding and the custom role stays read-only (G4). `docs/operations.md` + `docs/architecture.md` describe the firewall/SSH posture (G3, G5). Gates: `terraform fmt -check`/`validate` clean, both YAMLs parse, `validate_spec`/`validate_tasks`/`validate_state` exit 0, `web/` untouched (149 pass).
 
 **Amendment 2 fix round 2 (validation.md G6 + guard hardening)**: `infra/compute.tf` sets `metadata["block-project-ssh-keys"] = "TRUE"` so `gcloud compute ssh` writes its ephemeral key to *instance* metadata (covered by the instance-scoped `compute.instances.setMetadata`) instead of needing a project-wide metadata write the deploy SA does not hold (G6, second P0). `ci.yml` `iac-guardrails` hardened: the `deploy_vm_operator` binding must reference the custom-role id (not a `roles/` literal), the custom role's permission list must carry no mutating verb, and the custom-role permission list is checked with an allowlist (`.get`/`.list` only) (closes evasions S6/S10). Guards exercised against synthetic offenders — all bite. (The `:22`/`operator_ssh_cidrs` firewall guards were later removed when public `:22` was deliberately reopened for the evaluation board.) Commits `9f11dc5`, `f631ef7`, + this doc commit. Re-verification: G2–G5 fully closed, G1 closed on shape, G6 the remaining item now fixed.
+
+**Amendment 3 (AD-008, semver releases)**: new `.github/workflows/release.yml` runs `googleapis/release-please-action@v4` on push to `main`; `release-please-config.json` + `.release-please-manifest.json` at repo root. Conventional-Commit-driven `vX.Y.Z` tags + GitHub Releases + `web/CHANGELOG.md`, zero manual version bumps. `spec.md` CICD story gains AC 9 + `CICD-09`. Gates: both new JSON files parse, `release.yml` parses as YAML, `validate_spec`/`validate_state` exit 0, `web/` untouched.
 
 ### Operator: still-open live items
 - `terraform apply` the new `infra/` resources (custom role `deployVmOperator` included), then `terraform output` for the two GitHub secrets. First real deploy is the true test of the IAP permission set — same "only-found-live" class as the two `startup.sh.tpl` bugs in `CLAUDE.md`.

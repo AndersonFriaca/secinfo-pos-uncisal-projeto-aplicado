@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "bootstrap-sha": "3cbc1e352df9348f4bbc32a33fe770d6d3b623db",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "refactor", "section": "Refactors" },
+    { "type": "build", "section": "Build" },
+    { "type": "ci", "section": "CI/CD" },
+    { "type": "docs", "section": "Documentation", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "chore", "section": "Chores", "hidden": true },
+    { "type": "style", "section": "Styles", "hidden": true }
+  ],
+  "packages": {
+    "web": {
+      "package-name": "nextjs-secure-app"
+    }
+  }
+}

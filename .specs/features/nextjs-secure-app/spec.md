@@ -241,8 +241,9 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 6. VM authentication SHALL go entirely through the WIF-federated deploy service account over an IAP tunnel, with **no SSH key material stored as a GitHub secret or committed to the repository**; the workflow SHALL read every other credential (WIF provider, service-account email, Identity Platform API key, Admin SDK credentials) from GitHub Actions secrets — never from a file in the repository. <!-- ubiquitous -->
 7. The system SHALL write the application's runtime environment file on the VM (outside the repository, e.g. `/opt/app/.env.production`) with `chmod 600`, populated from GitHub secrets at deploy time. <!-- ubiquitous -->
 8. The repository SHALL contain no `.env` file, no service-account key, and no secret value — enforced by `.gitignore` and verifiable with `git ls-files`. <!-- ubiquitous -->
+9. WHEN commits land on `main` THEN a `release-please` workflow SHALL derive the next semver version from the Conventional Commit types (`feat` → minor, `fix` → patch, `feat!`/`BREAKING CHANGE` → major) and maintain a release pull request that bumps `web/package.json` and `web/CHANGELOG.md`; merging that pull request SHALL create the annotated tag `vX.Y.Z` and a matching GitHub Release. The version SHALL never be bumped by hand. <!-- event-driven -->
 
-**Independent Test**: A merge to `main` produces a green Actions run whose logs show WIF authentication (no key file), an IP resolved dynamically, `gcloud compute scp/ssh --tunnel-through-iap` reaching the VM with no SSH private key in the workspace, a PM2 restart, and a 200 from the health poll; the workflow file contains no `VM_SSH_*` secret reference; `git ls-files | grep -E '\.env$|credentials.*\.json'` returns nothing; `curl -s https://<ip>/` serves the newly built page.
+**Independent Test**: A merge to `main` produces a green Actions run whose logs show WIF authentication (no key file), an IP resolved dynamically, `gcloud compute scp/ssh --tunnel-through-iap` reaching the VM with no SSH private key in the workspace, a PM2 restart, and a 200 from the health poll; the workflow file contains no `VM_SSH_*` secret reference; `git ls-files | grep -E '\.env$|credentials.*\.json'` returns nothing; `curl -s https://<ip>/` serves the newly built page. After a `feat:` or `fix:` commit lands on `main`, the `Release` workflow opens a `chore(main): release …` pull request; merging it creates a `vX.Y.Z` tag and a GitHub Release whose notes match `web/CHANGELOG.md`, and `web/package.json` `version` equals the tag.
 
 ---
 
@@ -376,6 +377,7 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 | CICD-06 | P1: Continuous deployment to the VM | Design | Pending |
 | CICD-07 | P1: Continuous deployment to the VM | Design | Pending |
 | CICD-08 | P1: Continuous deployment to the VM | Design | Pending |
+| CICD-09 | P1: Continuous deployment to the VM | Done | `.github/workflows/release.yml` + `release-please-config.json` |
 | TF-01 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
 | TF-02 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
 | TF-03 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |

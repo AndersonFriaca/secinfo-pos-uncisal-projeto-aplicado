@@ -112,6 +112,12 @@ Os outros dois são valores que você já conhece: `GCP_PROJECT_ID` e `GCP_ZONE`
 alcança a VM por um túnel IAP com uma chave efêmera (veja
 [security.md](security.md)).
 
+## 7. Releases versionadas
+
+Nada a configurar — `.github/workflows/release.yml` (`release-please`) já cuida
+das tags `vX.Y.Z` e dos GitHub Releases a partir dos commits Conventional
+Commits em `main`. Veja [operations.md](operations.md#cortar-uma-release-tag--github-release).
+
 ## Operação do dia a dia
 
 Para iniciar/parar a VM (o que também trata da dança de reserva/liberação do

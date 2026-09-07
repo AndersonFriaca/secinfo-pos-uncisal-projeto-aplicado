@@ -87,6 +87,24 @@ Procure por `Script "startup-script" failed with error` — isso significa que o
 rodou. Veja [troubleshooting.md](troubleshooting.md) para os dois casos reais
 disso encontrados até agora.
 
+## Cortar uma release (tag + GitHub Release)
+
+Versionamento é semver automático via `release-please`
+(`.github/workflows/release.yml`) — **nunca edite `web/package.json` `version`
+na mão**. O fluxo:
+
+1. Commits normais em `main` seguindo Conventional Commits (`feat:` sobe minor,
+   `fix:` sobe patch, `feat!:` ou rodapé `BREAKING CHANGE:` sobe major). Os
+   tipos `docs`/`test`/`chore`/`style` não sobem versão.
+2. A cada push em `main`, o workflow abre (ou atualiza) um PR
+   `chore(main): release X.Y.Z` que sobe `web/package.json` e
+   `web/CHANGELOG.md`.
+3. Fazer merge desse PR cria a tag anotada `vX.Y.Z` e o GitHub Release com as
+   notas do changelog. O push da tag re-dispara `deploy.yml`.
+
+`bootstrap-sha` em `release-please-config.json` fixa `3cbc1e3` como ponto de
+partida — a primeira release só conta commits depois do trabalho de CI/CD.
+
 ## Teardown
 
 Remova todo recurso cobrável com um único comando no root principal:
