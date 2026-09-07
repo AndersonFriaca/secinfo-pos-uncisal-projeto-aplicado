@@ -46,10 +46,19 @@ jobs:
         working-directory: web
         run: |
           set -euo pipefail
-          rm -rf bundle && mkdir -p bundle/.next/static
-          cp -r .next/standalone/. bundle/
+          # The app lives in the `web/` workspace, so `next build` nests the
+          # standalone output one level down: .next/standalone/web/server.js
+          # (with its own node_modules + .next). That nested dir is the bundle
+          # root — server.js must sit at the archive root so PM2's
+          # `current/server.js` resolves. next build does NOT copy .next/static
+          # or public/ into standalone; add them at the path server.js expects.
+          APP=".next/standalone/web"
+          test -f "$APP/server.js" || { echo "no server.js at $APP" >&2; exit 1; }
+          rm -rf bundle && mkdir -p "bundle/.next/static"
+          cp -r "$APP/." bundle/
           cp -r .next/static/. bundle/.next/static/
           [ -d public ] && cp -r public bundle/public || true
+          test -f bundle/server.js
           tar -czf "$GITHUB_WORKSPACE/release.tgz" -C bundle .
 
       - name: Authenticate to Google Cloud (Workload Identity Federation)
