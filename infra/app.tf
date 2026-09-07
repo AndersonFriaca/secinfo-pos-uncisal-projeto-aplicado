@@ -9,6 +9,9 @@ locals {
     "identitytoolkit.googleapis.com",
     # Firebase project enablement (google_firebase_project, firebase.tf).
     "firebase.googleapis.com",
+    # Being retired alongside firestore.tf — see that file's header. Removed in
+    # the follow-up commit once deletion_policy = "DELETE" is in state.
+    "firestore.googleapis.com",
     # Service Accounts + custom roles for the keyless deploy identity, and the
     # STS endpoint google-github-actions/auth exchanges the GitHub OIDC token at.
     "iam.googleapis.com",
@@ -50,18 +53,6 @@ resource "google_identity_platform_config" "default" {
   }
 
   depends_on = [google_firebase_project.default]
-}
-
-# One-time cleanup: destroy the retired Firestore database. The rate limiter is
-# now an in-memory store (AD-009); the previous commit set its deletion_policy
-# to DELETE, so this removal deletes it from GCP rather than orphaning it.
-# Safe to delete this block once `terraform apply` has run.
-removed {
-  from = google_firestore_database.default
-
-  lifecycle {
-    destroy = true
-  }
 }
 
 # The API key the app's Route Handlers pass as `?key=` when calling the
