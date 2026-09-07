@@ -117,11 +117,19 @@ jobs:
           done
           $GCLOUD scp --zone="$ZONE" --tunnel-through-iap \
             "$GITHUB_WORKSPACE/release.tgz" "app-vm:/tmp/release-$SHA.tgz"
+          # Push the PM2 process definition from the repo on every deploy — it is
+          # the source of truth for how the app is launched. The startup script
+          # seeds /opt/app/ecosystem.config.js at boot, but an older VM can still
+          # carry a stale copy (e.g. one that ran `npm start`), so overwrite it.
+          $GCLOUD scp --zone="$ZONE" --tunnel-through-iap \
+            "$GITHUB_WORKSPACE/infra/scripts/ecosystem.config.js" "app-vm:/tmp/ecosystem-$SHA.js"
           $SSH "set -euo pipefail
             sudo install -d -o appsvc -g appsvc /opt/app/releases/$SHA
             sudo tar -xzf /tmp/release-$SHA.tgz -C /opt/app/releases/$SHA
             sudo chown -R appsvc:appsvc /opt/app/releases/$SHA
             rm -f /tmp/release-$SHA.tgz
+            sudo install -m 644 -o appsvc -g appsvc /tmp/ecosystem-$SHA.js /opt/app/ecosystem.config.js
+            rm -f /tmp/ecosystem-$SHA.js
             sudo ln -sfn /opt/app/releases/$SHA /opt/app/current"
 
       - name: Write /opt/app/.env.production from secrets
@@ -156,9 +164,13 @@ jobs:
           ZONE: ${{ secrets.GCP_ZONE }}
         run: |
           set -euo pipefail
+          # `pm2 reload` keeps a running app's cached script/interpreter args, so
+          # a changed ecosystem.config.js (or a stale saved process) would be
+          # ignored. Delete + start forces PM2 to re-read the file, then save so
+          # the pm2-appsvc unit resurrects the right definition on reboot.
           gcloud compute --quiet --project="$PROJECT" ssh app-vm \
             --zone="$ZONE" --tunnel-through-iap --command \
-            "sudo -u appsvc bash -lc 'cd /opt/app && (pm2 reload ecosystem.config.js --update-env || pm2 start ecosystem.config.js) && pm2 save'"
+            "sudo -u appsvc bash -lc 'cd /opt/app && pm2 delete ecosystem.config.js 2>/dev/null || true; pm2 start ecosystem.config.js && pm2 save'"
 
       - name: Health poll (fail after 2 minutes without HTTP 200)
         env:

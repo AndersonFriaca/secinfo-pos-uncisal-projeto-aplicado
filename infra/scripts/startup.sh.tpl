@@ -244,11 +244,13 @@ mkdir -p /opt/app
 # Owned by appsvc, which PM2 runs as. The IAP deploy connects as an ephemeral
 # sudo-capable user and writes releases with `sudo install -o appsvc`.
 chown -R appsvc:appsvc /opt/app
-if [ ! -f /opt/app/ecosystem.config.js ]; then
-  cat > /opt/app/ecosystem.config.js <<'EOF'
+# Rewritten unconditionally on every boot: this file is the source of truth for
+# how PM2 launches the app, and an older VM may still carry a stale copy from a
+# previous provisioning. A `[ ! -f ]` guard would pin that stale copy forever.
+cat > /opt/app/ecosystem.config.js <<'EOF'
 ${ecosystem_config}
 EOF
-fi
+chown appsvc:appsvc /opt/app/ecosystem.config.js
 
 if [ -f "$HTTPS_SITE" ] && grep -qF "# managed-by-terraform: proxy-placeholder" "$HTTPS_SITE"; then
   cat > "$HTTPS_SITE" <<EOF

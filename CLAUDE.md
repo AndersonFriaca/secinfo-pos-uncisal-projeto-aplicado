@@ -26,9 +26,10 @@ Full deploy/teardown steps are in `README.md`. Full requirements/design history 
 
 ## Real-deployment corrections worth knowing before touching `infra/scripts/startup.sh.tpl`
 
-Two bugs were found only by actually applying this against a live GCP project — not visible from reading the Terraform alone:
+Bugs found only by actually applying this against a live GCP project — not visible from reading the Terraform alone:
 
 1. Ubuntu 24.04's systemd unit for SSH is `ssh.service`, not `sshd.service`. `systemctl reload sshd` fails and (under `set -euo pipefail`) kills the entire startup script silently.
 2. The HTTPS Nginx server block embeds the current public IP into its `ssl_certificate` path at creation time. The idempotency guard must check that the file's embedded IP still matches the current public IP — not just that the file exists — or an IP change (e.g. after a stop/start cycle) leaves Nginx pointing at a stale, non-existent cert path.
+3. `/opt/app/ecosystem.config.js` must be written **unconditionally** on every boot, not behind a `[ ! -f ]` guard. A VM first provisioned with an early version of the file (which ran `pm2 start npm -- start`) kept that stale copy through every later `terraform apply` + reboot; the first real CI deploy then crash-looped on `ENOENT /opt/app/package.json` and Nginx served 502. `deploy.yml` also scp's this file on every deploy, and the PM2 reload is `pm2 delete` + `pm2 start` (not `pm2 reload`, which keeps a running app's cached script/interpreter args).
 
-Both are already fixed in the committed script; mentioned here so a future edit doesn't accidentally reintroduce either pattern.
+All fixed in the committed script + `deploy.yml`; mentioned here so a future edit doesn't reintroduce any of these patterns.
