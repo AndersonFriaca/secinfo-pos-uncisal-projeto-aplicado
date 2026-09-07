@@ -64,7 +64,7 @@ describe("POST /api/auth/signup (T13)", () => {
       d,
     );
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("Enter a valid email address");
+    expect((await res.json()).error).toBe("Informe um e-mail válido");
     expect(d.signUp).not.toHaveBeenCalled();
   });
 
@@ -80,7 +80,7 @@ describe("POST /api/auth/signup (T13)", () => {
     expect(dupe.status).toBe(400);
     expect(await dupe.clone().text()).toBe(await other.clone().text());
     expect((await dupe.json()).error).toBe(
-      "Could not create the account with those details",
+      "Não foi possível criar a conta com esses dados",
     );
   });
 

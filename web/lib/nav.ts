@@ -14,6 +14,6 @@ export type HeaderNavLink = { href: string; label: string };
 /** `/dashboard` for an authenticated visitor, otherwise `/login` (APP-04). */
 export function headerNavLink(user: AuthUser | null): HeaderNavLink {
   return user
-    ? { href: "/dashboard", label: "Go to dashboard" }
-    : { href: "/login", label: "Log in" };
+    ? { href: "/dashboard", label: "Ir para o painel" }
+    : { href: "/login", label: "Entrar" };
 }

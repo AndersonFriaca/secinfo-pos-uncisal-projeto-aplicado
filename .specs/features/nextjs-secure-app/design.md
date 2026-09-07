@@ -26,8 +26,8 @@ graph TD
     Pages -->|cookies + verifySessionCookie| Admin[firebase-admin]
     API -->|signInWithPassword / signUp / sendOobCode| IDP[(Identity Platform REST)]
     API -->|createSessionCookie / revokeRefreshTokens| Admin
-    API -->|rate limit + brute force| Limiter[Rate limiter<br/>L1 memory → Firestore]
-    Limiter --> FS[(Firestore)]
+    API -->|rate limit + brute force| Limiter[Rate limiter<br/>L1 memory → RateLimitStore]
+    Limiter --> Store[(RateLimitStore<br/>in-memory default · Firestore adapter)]
 
     GH[GitHub Actions] -->|WIF, no static key| GCP[gcloud: resolve IP, start VM]
     GH -->|scp bundle + pm2 reload over IAP tunnel, ephemeral SSH key| VMBox[/opt/app on the VM, owned by appsvc/]
@@ -121,11 +121,11 @@ graph TD
   - `recordLoginFailure(ip: string, now?: number): Promise<{ blocked: boolean; retryAfterSeconds?: number }>`
   - `resetLoginFailures(ip: string): Promise<void>`
 - **Design**:
-  - **L1 (memory)**: a `Map<ip, { blockedUntil: number }>`. A request from an IP with `blockedUntil > now` is rejected immediately, with **no Firestore read or write** (SEC-07) — this is what stops a sustained attack from consuming the 20k writes/day free quota.
-  - **L2 (Firestore)**: collection `rate_limits`, one document per IP, updated inside a transaction so two concurrent requests cannot skip the 5th-failure threshold.
+  - **L1 (memory)**: a `Map<ip, { blockedUntil: number }>`. A request from an IP with `blockedUntil > now` is rejected immediately, with **no store read or write** (SEC-07) — this is what stops a sustained attack from consuming a backing store's daily quota.
+  - **L2 (`RateLimitStore`)**: a pluggable transactional key-value store keyed `rate_limits/{ip}`. The shipped default (`createInMemoryStore`) is a process-local `Map`; its `transact` does a synchronous read-modify-write, which on single-threaded Node cannot interleave and skip the 5th-failure threshold. `createFirestoreStore` is retained for a durable, cross-instance store (collection `rate_limits`, updated inside a Firestore transaction) and is wired with `configureRateLimitStore` — see AD-009.
   - Thresholds are injected, not hardcoded at call sites: 5 failures → 60s block; `auth` bucket 10 req/min; `general` bucket 100 req/min.
   - `now` is an injectable parameter so tests can drive the clock deterministically instead of sleeping.
-- **Failure mode**: if Firestore is unreachable during a **login** attempt, `checkRateLimit` throws and the route returns 503 — failing **closed**, per the spec's edge case. The general limiter fails open (a 100 req/min cap is not a security guarantee worth taking the site down for).
+- **Failure mode**: if the store throws during a **login** attempt (only possible with a network-backed store like Firestore), `checkRateLimit` propagates and the route returns 503 — failing **closed**, per the spec's edge case. The general limiter fails open (a 100 req/min cap is not a security guarantee worth taking the site down for). The in-memory default cannot throw here.
 - **Requirements**: SEC-01..SEC-07, SEC-25..SEC-27
 
 ### `lib/auth/identity-platform.ts` — server-side REST client
@@ -219,7 +219,7 @@ PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_E
 
 ## Data Models
 
-### Firestore — `rate_limits/{ip}`
+### RateLimitStore record — `rate_limits/{ip}` (in-memory map value by default; a Firestore doc with the adapter)
 
 ```ts
 type RateLimitDoc = {
@@ -246,11 +246,11 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 
 | Scenario | Handling | User sees |
 | --- | --- | --- |
-| Wrong password / unknown email | Collapse both to one result; increment the IP's failure counter | 401 "Invalid email or password" — byte-identical either way |
-| Email already registered on signup | Same generic rejection as any other signup failure | 400 "Could not create the account with those details" |
+| Wrong password / unknown email | Collapse both to one result; increment the IP's failure counter | 401 "E-mail ou senha inválidos" — byte-identical either way |
+| Email already registered on signup | Same generic rejection as any other signup failure | 400 "Não foi possível criar a conta com esses dados" |
 | 5th consecutive failure from an IP | Block for 60s; further attempts short-circuit in the L1 cache | 429 with `Retry-After: 60` |
-| Firestore unreachable during login | Fail **closed** — the brute-force guarantee outranks login availability | 503, generic message |
-| Firestore unreachable for the general limiter | Fail open, log it | Normal response |
+| Rate-limit store throws during login (network-backed store only) | Fail **closed** — the brute-force guarantee outranks login availability | 503, generic message |
+| Rate-limit store throws for the general limiter | Fail open, log it | Normal response |
 | Identity Platform 5xx / API key missing | Distinguish from a credential error; log the upstream detail server-side only | 503, generic message |
 | Session cookie expired, revoked, or user disabled | `verifySessionCookie(..., checkRevoked: true)` returns null | 303 to `/login` |
 | CSRF token missing or mismatched | Rejected in `proxy.ts` before any handler runs | 403 |
@@ -269,8 +269,8 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 | CSP with a nonce forces every page dynamic — no static optimisation, no PPR | whole app | Slower first byte, more CPU per request on a shared-core e2-micro | Accepted: SSR is an explicit requirement, and traffic is a grader plus a few test hits. Documented so it isn't mistaken for a misconfiguration |
 | `COEP: require-corp` breaks any cross-origin subresource that doesn't opt in | `lib/security/headers.ts` | A future third-party script or CDN font would silently fail to load | Safe today (shadcn is local source, `next/font` self-hosts). Flagged in the spec's assumptions so the trade-off is visible before someone adds a CDN |
 | `X-Forwarded-For` is client-controllable in principle | `lib/security/rate-limit.ts` | A spoofed header could let an attacker rotate "IPs" and dodge the block | Nginx is the only ingress and overwrites the header for direct traffic; documented as a known limitation rather than claimed as airtight |
-| Firestore free tier is 20k writes/day | `lib/security/rate-limit.ts` | A sustained attack could exhaust it and (fail-closed) take login down | L1 memory cache short-circuits already-blocked IPs before any Firestore call (SEC-07) — the write cost of an attack is bounded by the number of *distinct* IPs, not the number of attempts |
-| In-memory L1 resets on every deploy/restart | `lib/security/rate-limit.ts` | A block can be "forgotten" by the fast path right after a deploy | Firestore remains the source of truth; a reset L1 only costs one extra read to re-learn the block. No security property is lost |
+| In-memory default store resets on every deploy/restart | `lib/security/rate-limit.ts` | Every counter (not just the L1 fast path) is forgotten on restart, so a block does not survive a deploy | Accepted for now (AD-009): single VM instance, 60s block windows, restarts are rare and operator-driven. `configureRateLimitStore(createFirestoreStore(db))` restores durability without touching call sites. The L1 cache still bounds an attack's store writes to the number of *distinct* IPs |
+| A Firestore-backed store would face the 20k writes/day free tier | `lib/security/rate-limit.ts` | A sustained attack could exhaust it and (fail-closed) take login down | Only relevant once the Firestore adapter is wired; the L1 memory cache short-circuits already-blocked IPs before any store call (SEC-07) |
 | Ephemeral SSH key / sshd propagation lag on a just-started VM | `.github/workflows/deploy.yml` | The first `gcloud compute ssh --tunnel-through-iap` after a VM start can fail for ~30-60s while the key reaches instance metadata and the guest agent applies it | The deploy's first remote call retries in a `for i in $(seq 1 12); do ... sleep 5; done` loop before the bundle transfer |
 | Verification email deliverability is Google's default sender | Identity Platform | Mail may land in spam, blocking signup end-to-end | Out of our control without a custom SMTP domain (explicitly out of scope); `/verify-email` offers a resend, and the operator can flip `emailVerified` in the console if a demo is blocked |
 
@@ -283,7 +283,7 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 | Security-gate file | `proxy.ts` exporting `proxy()`, not `middleware.ts` | Next.js 16 renamed the convention; verified against the 16.3.4 CSP guide rather than assumed from older tutorials |
 | Where session verification happens | In Server Components / Route Handlers, never in `proxy.ts` | Edge runtime cannot load `firebase-admin`; a fast cookie-presence check in the proxy would be a convenience, not the authority |
 | CSP strategy | Per-request nonce with `'strict-dynamic'`, forcing dynamic rendering | The spec forbids `'unsafe-inline'`; nonce is the approach Next.js documents, and SSR is required anyway so the cost is already paid |
-| Rate-limit store | Firestore + in-process L1 cache | User chose Firestore for durability; L1 is what keeps the free-tier write quota safe under attack |
+| Rate-limit store | Pluggable `RateLimitStore`; in-memory default, Firestore adapter retained (AD-009) + in-process L1 cache | User chose the in-memory store for now (single instance); Firestore stays provisioned and one `configureRateLimitStore` call away. L1 keeps a backing store's write quota safe under attack |
 | Login failure mode when the store is down | Fail closed (503) | A login form that stays up without brute-force protection is worse than one that is briefly unavailable |
 | Error message policy | One generic message for every credential failure, and for every signup rejection | Prevents account enumeration (OWASP Identification and Authentication Failures) |
 | Build location | GitHub Actions, deploying a `standalone` bundle | 1 GB RAM on the VM makes on-host builds slow and OOM-prone |

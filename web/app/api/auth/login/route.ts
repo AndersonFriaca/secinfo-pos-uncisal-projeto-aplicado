@@ -25,9 +25,9 @@ import {
 export const runtime = "nodejs";
 
 /** AUTH-10: one message for an unknown email and a wrong password alike. */
-const INVALID_CREDENTIALS_ERROR = "Invalid email or password";
-const UNAVAILABLE_ERROR = "Service temporarily unavailable";
-const RATE_LIMITED_ERROR = "Too many requests";
+const INVALID_CREDENTIALS_ERROR = "E-mail ou senha inválidos";
+const UNAVAILABLE_ERROR = "Serviço temporariamente indisponível";
+const RATE_LIMITED_ERROR = "Muitas requisições";
 
 /** Session cookie name (Firebase convention, matches the design). */
 const SESSION_COOKIE = "__session";

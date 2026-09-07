@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { emptyState, type RateLimitState } from "./rate-limit-core";
 import {
   __clearRateLimitCache,
+  __resetRateLimitStore,
   checkLoginBlock,
   checkRateLimit,
   createFirestoreStore,
+  createInMemoryStore,
   recordLoginFailure,
   resetLoginFailures,
   resolveClientIp,
@@ -42,6 +44,30 @@ class FakeStore implements RateLimitStore {
 
 beforeEach(() => {
   __clearRateLimitCache();
+  __resetRateLimitStore();
+});
+
+describe("default store — process-local memory, no configuration needed", () => {
+  it("persists failures across calls without an explicit store and blocks on the 5th", async () => {
+    const results = [];
+    for (let i = 0; i < 5; i++) {
+      results.push(await recordLoginFailure("9.9.9.9", { now: T0 }));
+    }
+    expect(results.slice(0, 4).every((r) => !r.blocked)).toBe(true);
+    expect(results[4].blocked).toBe(true);
+    expect(results[4].retryAfterSeconds).toBe(60);
+  });
+
+  it("createInMemoryStore keeps counters isolated per instance", async () => {
+    const a = createInMemoryStore();
+    const b = createInMemoryStore();
+    for (let i = 0; i < 5; i++) {
+      await recordLoginFailure("1.2.3.4", { store: a, now: T0 });
+    }
+    __clearRateLimitCache();
+    const onB = await checkLoginBlock("1.2.3.4", { store: b, now: T0 + 1000 });
+    expect(onB.blocked).toBe(false);
+  });
 });
 
 describe("resolveClientIp (SEC-06)", () => {

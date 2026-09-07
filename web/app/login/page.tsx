@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /** Generic, field-agnostic message — matches the route's 401 body (AUTH-10). */
-const GENERIC_ERROR = "Invalid email or password";
+const GENERIC_ERROR = "E-mail ou senha inválidos";
 
 /**
  * Login screen (APP-03, SEC-21). A shadcn email + password form posting to
@@ -32,9 +32,9 @@ export default async function LoginPage({
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-6 py-16">
       <Card>
         <CardHeader>
-          <CardTitle>Log in</CardTitle>
+          <CardTitle>Entrar</CardTitle>
           <CardDescription>
-            Enter your email and password to reach the dashboard.
+            Informe seu e-mail e senha para acessar o painel.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -51,7 +51,7 @@ export default async function LoginPage({
           >
             <input type="hidden" name="csrf_token" value={csrfToken} />
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">E-mail</Label>
               <Input
                 id="email"
                 name="email"
@@ -61,7 +61,7 @@ export default async function LoginPage({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Senha</Label>
               <Input
                 id="password"
                 name="password"
@@ -70,15 +70,15 @@ export default async function LoginPage({
                 required
               />
             </div>
-            <Button type="submit">Log in</Button>
+            <Button type="submit">Entrar</Button>
           </form>
         </CardContent>
       </Card>
 
       <p className="text-center text-sm text-muted-foreground">
-        No account?{" "}
+        Não tem conta?{" "}
         <Link href="/signup" className="underline underline-offset-4">
-          Create one
+          Crie uma
         </Link>
       </p>
     </main>

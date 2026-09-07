@@ -34,7 +34,7 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 | Auth architecture | **Server-only**: Next.js Route Handlers call `identitytoolkit.googleapis.com` REST (`accounts:signInWithPassword`, `accounts:signUp`, `accounts:sendOobCode`) with a server-held API key, then mint a Firebase **session cookie** via the Admin SDK. No Firebase client SDK, no `NEXT_PUBLIC_*` variable, no config in the browser bundle. | User requirement: "as ENVs não poderão ser expostas". Google's standard client-SDK flow publishes the API key in the bundle by design; the REST+session-cookie flow keeps every credential server-side and fits SSR. Endpoints verified against Google's Identity Platform REST reference. | y |
 | User provisioning | Public self-service signup screen | User choice (PRD requires only login/dashboard/logout). | y |
 | Email verification | **Required** before the dashboard is reachable | User choice. Identity Platform sends the verification email itself via `accounts:sendOobCode` (`requestType=VERIFY_EMAIL`), so no SMTP infrastructure is needed. | y |
-| Rate-limit / brute-force store | **Firestore**, fronted by an in-process L1 cache | User chose Firestore for persistence across deploys. The L1 cache is a design addition: an already-blocked IP is rejected from memory without a Firestore round-trip, so a sustained attack cannot burn the 20k writes/day free quota. | y |
+| Rate-limit / brute-force store | Pluggable `RateLimitStore`; **shipped default is a process-local in-memory store**, Firestore adapter retained and available (AD-009). Fronted by an in-process L1 cache | User chose the in-memory store for now (single VM instance, no cross-instance state needed); Firestore stays provisioned and one `configureRateLimitStore` call away for durability across deploys. The L1 cache still short-circuits an already-blocked IP before any store call. | y |
 | Identity Platform provisioning | Terraform (`google_identity_platform_config`, plus enabling `identitytoolkit.googleapis.com`) | User choice. The Admin SDK service-account key stays out of Terraform (it would land in state) — it is created once and stored as a GitHub secret / VM file. | y |
 | GitHub Actions → GCP authentication | **Workload Identity Federation** (no service-account JSON key in GitHub) | User choice; matches the course's security framing. Provisioned in Terraform alongside the rest. | y |
 | Deploy target discovery | Pipeline resolves the VM's current IP with `gcloud compute instances describe` at deploy time | The VM uses an ephemeral IP by design (see the infra feature's free-tier decision), so no fixed address exists to hardcode. | y |
@@ -137,13 +137,13 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 
 **Acceptance Criteria**:
 
-1. WHEN a login attempt from an IP fails THEN the system SHALL increment that IP's consecutive-failure counter in Firestore. <!-- event-driven -->
+1. WHEN a login attempt from an IP fails THEN the system SHALL increment that IP's consecutive-failure counter in the rate-limit store (a pluggable `RateLimitStore`; the shipped default is a process-local in-memory store, with a Firestore-backed adapter available — see AD-009). <!-- event-driven -->
 2. WHEN an IP reaches 5 consecutive failed login attempts THEN the system SHALL block that IP for 60 seconds and respond to further login attempts with HTTP 429 and a `Retry-After` header. <!-- event-driven -->
 3. WHILE an IP is blocked the system SHALL reject its login attempts without calling Identity Platform at all. <!-- state-driven -->
 4. WHEN a login succeeds THEN the system SHALL reset that IP's failure counter to zero. <!-- event-driven -->
 5. WHEN 60 seconds elapse after a block starts THEN the system SHALL allow that IP to attempt login again, starting from a zeroed counter. <!-- event-driven -->
 6. The system SHALL determine the client IP from the `X-Forwarded-For` header set by the VM's Nginx reverse proxy, taking the left-most entry, and SHALL fall back to the socket address when the header is absent. <!-- ubiquitous -->
-7. WHILE an IP is already known-blocked in the in-process cache the system SHALL reject the request without a Firestore read or write, so that a sustained attack cannot exhaust the daily free quota. <!-- state-driven -->
+7. WHILE an IP is already known-blocked in the in-process L1 cache the system SHALL reject the request without any store read or write, so that a sustained attack cannot exhaust a backing store's daily quota. <!-- state-driven -->
 
 **Independent Test**: Six sequential failed logins from the same IP: attempts 1-5 return 401, attempt 6 returns 429 with `Retry-After: 60`; after 60 seconds a valid credential succeeds with 303; a unit test drives the limiter's clock and asserts the exact transition at the 5th failure and at the 60-second boundary.
 
@@ -304,8 +304,8 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 ## Edge Cases
 
 - IF the Identity Platform API key is missing or invalid at runtime THEN the login and signup routes SHALL return HTTP 503 with a generic message and log the misconfiguration server-side, rather than crashing the process.
-- IF Firestore is unreachable when the rate limiter tries to read or write THEN the system SHALL fail **closed** for login attempts (reject with 503) rather than allowing unlimited attempts — availability of a login form matters less than the brute-force guarantee.
-- WHEN two requests from the same IP race at the boundary of the 5th failure THEN the limiter SHALL use a Firestore transaction so the counter cannot skip the threshold.
+- IF the rate-limit store is unreachable when the limiter tries to read or write THEN the system SHALL fail **closed** for login attempts (reject with 503) rather than allowing unlimited attempts — availability of a login form matters less than the brute-force guarantee. (Moot for the in-memory default, which cannot be "unreachable"; still enforced for a Firestore-backed store.)
+- WHEN two requests from the same IP race at the boundary of the 5th failure THEN the limiter SHALL apply the counter update atomically so the threshold cannot be skipped — a synchronous read-modify-write for the in-memory store (single-threaded Node), a transaction for the Firestore adapter.
 - IF a user's account is deleted or disabled while their session cookie is still valid THEN `verifySessionCookie(..., checkRevoked: true)` SHALL reject it on the next protected request.
 - WHEN the verification email link is clicked THEN Identity Platform's own hosted handler marks the account verified; the app SHALL re-check `emailVerified` on the next login rather than caching the previous value.
 - IF the deploy runs while a previous PM2 process is still serving THEN the pipeline SHALL replace the bundle and reload PM2 so that the port is never left unbound.

@@ -62,7 +62,7 @@ describe("POST /api/auth/login (T14)", () => {
     });
     const res = await handleLogin(formRequest(CREDS), d);
     expect(res.status).toBe(401);
-    expect((await res.json()).error).toBe("Invalid email or password");
+    expect((await res.json()).error).toBe("E-mail ou senha inválidos");
     expect(d.recordLoginFailure).toHaveBeenCalledWith("203.0.113.9");
     expect(res.headers.get("set-cookie")).toBeNull();
   });
@@ -119,7 +119,7 @@ describe("POST /api/auth/login (T14)", () => {
     });
     const res = await handleLogin(formRequest(CREDS), d);
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "Service temporarily unavailable" });
+    expect(await res.json()).toEqual({ error: "Serviço temporariamente indisponível" });
     expect(errorSpy).toHaveBeenCalled();
   });
 
@@ -131,7 +131,7 @@ describe("POST /api/auth/login (T14)", () => {
     });
     const res = await handleLogin(formRequest(CREDS), d);
     expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe("Service temporarily unavailable");
+    expect((await res.json()).error).toBe("Serviço temporariamente indisponível");
     expect(d.signInWithPassword).not.toHaveBeenCalled();
   });
 

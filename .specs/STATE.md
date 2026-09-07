@@ -180,6 +180,32 @@ not edit it manually. The release PR itself passes `ci.yml` (only touches
 package.json/CHANGELOG/manifest). Nothing reaches the VM until a release PR is
 merged (or `Deploy` is run manually via `workflow_dispatch`).
 
+### AD-009 — Rate-limit store: in-memory by default, Firestore adapter retained
+
+**Status**: active
+**Feature**: `nextjs-secure-app`
+
+The rate limiter's `RateLimitStore` default is `createInMemoryStore()` — a
+process-local `Map`, lazily built by `requireStore()` when nothing has been
+wired. `createFirestoreStore()` and `configureRateLimitStore()` stay in the
+module; `infra/firestore.tf` and `firestore.googleapis.com` stay provisioned
+(user: "manter o firestore no momento"). Switching to durable storage is one
+call — `configureRateLimitStore(createFirestoreStore(db))` at Route Handler
+startup — with no change to call sites or `rate-limit-core.ts`.
+
+**Why**: `configureRateLimitStore` was never actually called anywhere in
+production code, so every `/api/auth/*` POST would have thrown "rate-limit store
+not configured" on a real request. The deployment is a single VM instance with
+no cross-instance state need and 60-second block windows, so a process-local
+store is sufficient and removes the Firestore round-trip from the hot path. The
+in-process L1 block cache is unchanged.
+
+**Consequence**: rate-limit counters (not just the L1 fast path) reset on every
+deploy/restart. Acceptable given rare, operator-driven restarts; revisit if the
+app ever runs more than one instance. SEC-01/SEC-07 and the spec's rate-limit
+edge cases were reworded to be store-agnostic; the fail-closed-on-login
+guarantee still holds for a network-backed store.
+
 ## Handoff
 
 **Feature**: `nextjs-secure-app` — **COMPLETE**. Execute done (T1-T30, 5 sequential sub-agent batches), independent Verifier **PASS** on re-verification 1/3, minor residual gaps R1/R3 cleaned up.
@@ -196,6 +222,8 @@ merged (or `Deploy` is run manually via `workflow_dispatch`).
 **Amendment 2 fix round 2 (validation.md G6 + guard hardening)**: `infra/compute.tf` sets `metadata["block-project-ssh-keys"] = "TRUE"` so `gcloud compute ssh` writes its ephemeral key to *instance* metadata (covered by the instance-scoped `compute.instances.setMetadata`) instead of needing a project-wide metadata write the deploy SA does not hold (G6, second P0). `ci.yml` `iac-guardrails` hardened: the `deploy_vm_operator` binding must reference the custom-role id (not a `roles/` literal), the custom role's permission list must carry no mutating verb, and the custom-role permission list is checked with an allowlist (`.get`/`.list` only) (closes evasions S6/S10). Guards exercised against synthetic offenders — all bite. (The `:22`/`operator_ssh_cidrs` firewall guards were later removed when public `:22` was deliberately reopened for the evaluation board.) Commits `9f11dc5`, `f631ef7`, + this doc commit. Re-verification: G2–G5 fully closed, G1 closed on shape, G6 the remaining item now fixed.
 
 **Amendment 3 (AD-008, semver releases + deploy-on-release)**: new `.github/workflows/release.yml` runs `googleapis/release-please-action@v4` on push to `main`; `release-please-config.json` + `.release-please-manifest.json` at repo root. Conventional-Commit-driven `vX.Y.Z` tags + GitHub Releases + `web/CHANGELOG.md`, zero manual version bumps. `deploy.yml` trigger changed from `push: main` to `workflow_call` (+ `workflow_dispatch`); `release.yml` calls it from a `deploy` job gated on `release_created` — deploy fires once, only on a release, no more double-fire. `spec.md` CICD story AC 1 + AC 9 reworded, `CICD-09` added; `design.md` workflow table updated. Gates: both new JSON files parse, all three workflows parse as YAML, `validate_spec`/`validate_state` exit 0, `web/` untouched.
+
+**Amendment 4 (AD-009 + pt-BR UI)**: rate-limit store default switched to `createInMemoryStore()` (`requireStore()` builds it lazily; Firestore adapter + `configureRateLimitStore` retained, `infra/firestore.tf` untouched). All user-visible strings in `web/` translated to pt-BR: the five pages, `lib/nav.ts` labels, `app/layout.tsx` metadata description + `<html lang="pt-BR">`, and the API route error/ack message constants (`login`, `signup`, `resend-verification`). Tests updated: `lib/nav.test.ts`, `app/api/auth/login/route.test.ts`, `app/api/auth/signup/route.test.ts`; `rate-limit.test.ts` gains an in-memory-default block + `createInMemoryStore` isolation test. **151 tests pass** (was 149), lint/typecheck/build clean. spec/design reworded store-agnostic; SEC-01/SEC-07 + edge cases updated.
 
 ### Operator: still-open live items
 - `terraform apply` the new `infra/` resources (custom role `deployVmOperator` included), then `terraform output` for the two GitHub secrets. First real deploy is the true test of the IAP permission set — same "only-found-live" class as the two `startup.sh.tpl` bugs in `CLAUDE.md`.

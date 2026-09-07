@@ -13,13 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /** Generic, non-enumerating message — matches the route's 400 body (AUTH-04). */
-const GENERIC_ERROR = "Could not create the account with those details";
+const GENERIC_ERROR = "Não foi possível criar a conta com esses dados";
 
 const PASSWORD_RULES = [
-  "At least 12 characters",
-  "One lowercase and one uppercase letter",
-  "One digit",
-  "One symbol",
+  "Pelo menos 12 caracteres",
+  "Uma letra minúscula e uma maiúscula",
+  "Um dígito",
+  "Um símbolo",
 ];
 
 /**
@@ -37,9 +37,10 @@ export default async function SignupPage({
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-6 py-16">
       <Card>
         <CardHeader>
-          <CardTitle>Create an account</CardTitle>
+          <CardTitle>Criar uma conta</CardTitle>
           <CardDescription>
-            You will get a verification email before the dashboard unlocks.
+            Você receberá um e-mail de verificação antes de o painel ser
+            liberado.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -56,7 +57,7 @@ export default async function SignupPage({
           >
             <input type="hidden" name="csrf_token" value={csrfToken} />
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">E-mail</Label>
               <Input
                 id="email"
                 name="email"
@@ -66,7 +67,7 @@ export default async function SignupPage({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Senha</Label>
               <Input
                 id="password"
                 name="password"
@@ -81,15 +82,15 @@ export default async function SignupPage({
                 ))}
               </ul>
             </div>
-            <Button type="submit">Create account</Button>
+            <Button type="submit">Criar conta</Button>
           </form>
         </CardContent>
       </Card>
 
       <p className="text-center text-sm text-muted-foreground">
-        Already registered?{" "}
+        Já tem cadastro?{" "}
         <Link href="/login" className="underline underline-offset-4">
-          Log in
+          Entrar
         </Link>
       </p>
     </main>

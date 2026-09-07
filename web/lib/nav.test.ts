@@ -3,13 +3,13 @@ import { headerNavLink } from "./nav";
 
 describe("headerNavLink (APP-04)", () => {
   it("links an anonymous visitor to /login", () => {
-    expect(headerNavLink(null)).toEqual({ href: "/login", label: "Log in" });
+    expect(headerNavLink(null)).toEqual({ href: "/login", label: "Entrar" });
   });
 
   it("links an authenticated visitor to /dashboard", () => {
     expect(headerNavLink({ uid: "u1", email: "u1@example.com" })).toEqual({
       href: "/dashboard",
-      label: "Go to dashboard",
+      label: "Ir para o painel",
     });
   });
 

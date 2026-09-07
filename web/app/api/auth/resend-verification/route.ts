@@ -22,7 +22,7 @@ export const runtime = "nodejs";
 
 /** AUTH-06: identical whether or not the address exists. */
 const ACK_MESSAGE =
-  "If that account exists and still needs verification, a new email is on its way";
+  "Se essa conta existir e ainda precisar de verificação, um novo e-mail está a caminho";
 
 export type ResendDeps = {
   checkRateLimit: typeof checkRateLimit;
@@ -84,7 +84,7 @@ export async function handleResendVerification(
   if (!limit.allowed) {
     return json(
       429,
-      { error: "Too many requests" },
+      { error: "Muitas requisições" },
       { "retry-after": String(limit.retryAfterSeconds ?? 60) },
     );
   }

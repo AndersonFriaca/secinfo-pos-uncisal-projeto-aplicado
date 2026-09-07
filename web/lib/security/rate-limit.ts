@@ -3,8 +3,11 @@
  * in-process L1 cache that short-circuits already-blocked IPs.
  *
  * Every decision is delegated to `rate-limit-core.ts`; this module only stores
- * and caches. It runs on the Node runtime only (Firestore is not available on
- * the Edge runtime — see AD-005).
+ * and caches. The default store is process-local memory
+ * (`createInMemoryStore`); `createFirestoreStore` remains available for a
+ * durable, multi-instance store and can be wired with
+ * `configureRateLimitStore`. The Route Handlers that use it run on the Node
+ * runtime (AD-005).
  *
  * Requirements: SEC-03, SEC-06, SEC-07.
  */
@@ -54,23 +57,52 @@ function cachedBlock(ip: string, now: number): number | null {
   return until;
 }
 
+// --- in-memory store (the default) ---------------------------------------
+
+/**
+ * A {@link RateLimitStore} kept in a process-local `Map`. The read-modify-write
+ * in `transact` runs synchronously (no `await` between the read and the write)
+ * and the Node runtime is single-threaded, so two concurrent requests for the
+ * same IP cannot interleave and skip the 5th-failure threshold within one
+ * process.
+ *
+ * Counters live only in memory: they reset on every deploy/restart and are not
+ * shared across instances. This deployment runs a single VM instance, so that
+ * is acceptable; use {@link createFirestoreStore} + {@link configureRateLimitStore}
+ * for a durable, multi-instance store.
+ */
+export function createInMemoryStore(): RateLimitStore {
+  const states = new Map<string, RateLimitState>();
+  return {
+    async transact(ip, mutator) {
+      const current = states.get(ip) ?? emptyState();
+      const { next, output } = mutator(current);
+      states.set(ip, next);
+      return output;
+    },
+  };
+}
+
 // --- default store wiring ----------------------------------------------------
 
 let defaultStore: RateLimitStore | null = null;
 
-/** Wire the production store once, at Route Handler startup. */
+/** Swap the default store (e.g. to a Firestore-backed one) at startup. */
 export function configureRateLimitStore(store: RateLimitStore): void {
   defaultStore = store;
 }
 
+/** Test-only: forget the wired store so the next call rebuilds the default. */
+export function __resetRateLimitStore(): void {
+  defaultStore = null;
+}
+
 function requireStore(explicit?: RateLimitStore): RateLimitStore {
-  const store = explicit ?? defaultStore;
-  if (!store) {
-    throw new Error(
-      "rate-limit store not configured — call configureRateLimitStore() first",
-    );
+  if (explicit) return explicit;
+  if (!defaultStore) {
+    defaultStore = createInMemoryStore();
   }
-  return store;
+  return defaultStore;
 }
 
 // --- client IP resolution (SEC-06) -----------------------------------------

@@ -27,13 +27,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Projeto Aplicado",
   description:
-    "A server-rendered secure web prototype: public landing, email-verified signup, login, and a protected dashboard.",
+    "Protótipo web seguro renderizado no servidor: página pública, cadastro com verificação de e-mail, login e um painel protegido.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">

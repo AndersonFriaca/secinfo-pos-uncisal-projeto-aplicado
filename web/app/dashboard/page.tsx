@@ -44,12 +44,12 @@ export default async function DashboardPage() {
     <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-6 px-6 py-16">
       <Card>
         <CardHeader>
-          <CardTitle>Dashboard</CardTitle>
-          <CardDescription>You are signed in.</CardDescription>
+          <CardTitle>Painel</CardTitle>
+          <CardDescription>Você está autenticado.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <p className="text-sm">
-            Signed in as{" "}
+            Autenticado como{" "}
             <span className="font-medium">{user.email ?? user.uid}</span>
           </p>
           <form
@@ -59,7 +59,7 @@ export default async function DashboardPage() {
           >
             <input type="hidden" name="csrf_token" value={csrfToken} />
             <Button type="submit" variant="outline">
-              Log out
+              Sair
             </Button>
           </form>
         </CardContent>

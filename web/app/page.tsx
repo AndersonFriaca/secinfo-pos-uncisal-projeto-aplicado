@@ -15,9 +15,9 @@ import {
 const SESSION_COOKIE = "__session";
 
 const FEATURES = [
-  "Server-only Firebase auth — no credentials ever reach the browser",
-  "Email-verified signup, session-cookie login, server-verified dashboard",
-  "OWASP header set, per-request CSP nonce, CSRF tokens, brute-force IP blocking",
+  "Autenticação Firebase só no servidor — nenhuma credencial chega ao navegador",
+  "Cadastro com verificação de e-mail, login por cookie de sessão, painel validado no servidor",
+  "Conjunto de headers OWASP, nonce de CSP por requisição, tokens CSRF, bloqueio de IP por força bruta",
 ];
 
 /**
@@ -49,29 +49,30 @@ export default async function Home() {
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-8 px-6 py-16">
         <div className="flex flex-col gap-3">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
-            Projeto Aplicado — Secure App
+            Projeto Aplicado — Aplicação Segura
           </h1>
           <p className="text-base text-muted-foreground">
-            A server-rendered web prototype built to demonstrate active
-            mitigations for the OWASP Top 10:2025. Create an account, verify your
-            email, and sign in to reach the protected area.
+            Um protótipo web renderizado no servidor, feito para demonstrar
+            mitigações ativas para o OWASP Top 10:2025. Crie uma conta, verifique
+            seu e-mail e entre para acessar a área protegida.
           </p>
         </div>
 
         <div className="flex gap-3">
           <Button asChild>
-            <Link href="/signup">Create an account</Link>
+            <Link href="/signup">Criar uma conta</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/login">Log in</Link>
+            <Link href="/login">Entrar</Link>
           </Button>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>What this demo covers</CardTitle>
+            <CardTitle>O que esta demonstração cobre</CardTitle>
             <CardDescription>
-              Every control is implemented server-side and unit-tested.
+              Todo controle é implementado no servidor e coberto por testes
+              unitários.
             </CardDescription>
           </CardHeader>
           <CardContent>

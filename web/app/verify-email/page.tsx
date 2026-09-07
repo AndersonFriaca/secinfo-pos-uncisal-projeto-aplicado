@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 
 /** Non-enumerating acknowledgement — matches the resend route's 200 body (AUTH-06). */
 const RESENT_MESSAGE =
-  "If that account exists and still needs verification, a new email is on its way";
+  "Se essa conta existir e ainda precisar de verificação, um novo e-mail está a caminho";
 
 /**
  * Verify-email screen (APP-03, AUTH-06). Explains the pending verification and
@@ -32,10 +32,10 @@ export default async function VerifyEmailPage({
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-6 py-16">
       <Card>
         <CardHeader>
-          <CardTitle>Check your inbox</CardTitle>
+          <CardTitle>Verifique sua caixa de entrada</CardTitle>
           <CardDescription>
-            We sent a verification link to your email address. Click it, then log
-            in — the dashboard stays locked until your email is verified.
+            Enviamos um link de verificação para o seu e-mail. Clique nele e
+            depois entre — o painel fica bloqueado até seu e-mail ser verificado.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -52,7 +52,7 @@ export default async function VerifyEmailPage({
           >
             <input type="hidden" name="csrf_token" value={csrfToken} />
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">E-mail</Label>
               <Input
                 id="email"
                 name="email"
@@ -62,7 +62,7 @@ export default async function VerifyEmailPage({
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Senha</Label>
               <Input
                 id="password"
                 name="password"
@@ -72,16 +72,16 @@ export default async function VerifyEmailPage({
               />
             </div>
             <Button type="submit" variant="outline">
-              Resend verification email
+              Reenviar e-mail de verificação
             </Button>
           </form>
         </CardContent>
       </Card>
 
       <p className="text-center text-sm text-muted-foreground">
-        Already verified?{" "}
+        Já verificou?{" "}
         <Link href="/login" className="underline underline-offset-4">
-          Log in
+          Entrar
         </Link>
       </p>
     </main>

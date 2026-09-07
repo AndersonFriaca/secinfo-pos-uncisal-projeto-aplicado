@@ -3,8 +3,9 @@
  *
  * No I/O, no clock, no store: every function takes the current per-IP state
  * plus an explicit `now` and returns the next state together with a decision.
- * The persistence adapter (`rate-limit.ts`) wires this to Firestore and the
- * in-memory L1 cache.
+ * The persistence adapter (`rate-limit.ts`) wires this to a store (process-local
+ * memory by default, with a Firestore adapter available) and the in-memory L1
+ * cache.
  *
  * Requirements: SEC-01, SEC-02, SEC-04, SEC-05, SEC-25, SEC-26, SEC-27.
  */

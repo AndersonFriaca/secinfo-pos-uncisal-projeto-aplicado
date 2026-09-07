@@ -21,16 +21,16 @@ import { checkRateLimit, resolveClientIp } from "../../../../lib/security/rate-l
 export const runtime = "nodejs";
 
 /** AUTH-04: one message for every upstream signup rejection (no enumeration). */
-const GENERIC_SIGNUP_ERROR = "Could not create the account with those details";
-const INVALID_EMAIL_ERROR = "Enter a valid email address";
-const UNAVAILABLE_ERROR = "Service temporarily unavailable";
+const GENERIC_SIGNUP_ERROR = "Não foi possível criar a conta com esses dados";
+const INVALID_EMAIL_ERROR = "Informe um e-mail válido";
+const UNAVAILABLE_ERROR = "Serviço temporariamente indisponível";
 
 const PASSWORD_RULE_MESSAGE: Record<PasswordRule, string> = {
-  length: "Password must be at least 12 characters long",
-  lowercase: "Password must include a lowercase letter",
-  uppercase: "Password must include an uppercase letter",
-  digit: "Password must include a digit",
-  symbol: "Password must include a symbol",
+  length: "A senha deve ter pelo menos 12 caracteres",
+  lowercase: "A senha deve incluir uma letra minúscula",
+  uppercase: "A senha deve incluir uma letra maiúscula",
+  digit: "A senha deve incluir um dígito",
+  symbol: "A senha deve incluir um símbolo",
 };
 
 export type SignupDeps = {
@@ -103,7 +103,7 @@ export async function handleSignup(
   if (!limit.allowed) {
     return json(
       429,
-      { error: "Too many requests" },
+      { error: "Muitas requisições" },
       { "retry-after": String(limit.retryAfterSeconds ?? 60) },
     );
   }
