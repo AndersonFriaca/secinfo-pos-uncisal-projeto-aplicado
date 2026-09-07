@@ -9,9 +9,6 @@ locals {
     "identitytoolkit.googleapis.com",
     # Firebase project enablement (google_firebase_project, firebase.tf).
     "firebase.googleapis.com",
-    # Being retired alongside firestore.tf — see that file's header. Removed in
-    # the follow-up commit once deletion_policy = "DELETE" is in state.
-    "firestore.googleapis.com",
     # Service Accounts + custom roles for the keyless deploy identity, and the
     # STS endpoint google-github-actions/auth exchanges the GitHub OIDC token at.
     "iam.googleapis.com",
