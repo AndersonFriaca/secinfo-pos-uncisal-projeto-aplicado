@@ -67,6 +67,9 @@ publicado ali — isso é esperado; o deploy da aplicação é uma feature separ
 | `infra/network.tf` | `google_compute_network`, `google_compute_subnetwork` | VPC custom dedicada — sem regras permissivas herdadas |
 | `infra/firewall.tf` | `google_compute_firewall` | Ingress de menor privilégio: SSH público (restringível via `var.operator_ssh_cidrs`), SSH da faixa IAP (sempre), HTTP, HTTPS |
 | `infra/compute.tf` | `google_compute_instance` | A própria VM — cada configuração fixada para free-tier + Shielded VM |
+| `infra/app.tf` | `google_project_service`, `google_identity_platform_config`, `google_apikeys_key` | APIs da aplicação, config de sign-in email/senha, API key restrita a `identitytoolkit`. Sem banco de dados — o rate limiting é em memória |
+| `infra/firebase.tf` | `google_firebase_project` (google-beta) | Habilita o Firebase no projeto (Firebase Authentication) |
+| `infra/wif.tf` | `google_iam_workload_identity_pool` + provider, `google_service_account`, IAM de menor privilégio | Identidade sem chave para o deploy do GitHub Actions |
 | `infra/scripts/startup.sh.tpl` | (instance metadata) | Provisionamento idempotente no boot — veja a lista de estágios abaixo |
 | `infra/scripts/ecosystem.config.js` | (copiado para `/opt/app`) | Definição do processo PM2 para a futura aplicação Next.js |
 | `infra/backend.tf` | `terraform { backend "gcs" {} }` | Aponta para o bucket de bootstrap via `-backend-config` (nunca um nome de bucket hardcoded — veja [security.md](security.md)) |

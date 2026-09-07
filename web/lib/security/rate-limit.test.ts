@@ -5,7 +5,6 @@ import {
   __resetRateLimitStore,
   checkLoginBlock,
   checkRateLimit,
-  createFirestoreStore,
   createInMemoryStore,
   recordLoginFailure,
   resetLoginFailures,
@@ -31,7 +30,7 @@ class FakeStore implements RateLimitStore {
     mutator: (current: RateLimitState) => { next: RateLimitState; output: T },
   ): Promise<T> {
     if (this.failNext) {
-      throw new Error("firestore unavailable");
+      throw new Error("store unavailable");
     }
     this.reads++;
     const current = this.states.get(ip) ?? emptyState();
@@ -170,7 +169,7 @@ describe("store-failure fail modes (SEC-06 edge case)", () => {
     store.failNext = true;
     await expect(
       checkRateLimit("6.6.6.6", "auth", { store, now: T0 }),
-    ).rejects.toThrow(/firestore unavailable/);
+    ).rejects.toThrow(/store unavailable/);
   });
 
   it("fails closed when recording a login failure — the error propagates", async () => {
@@ -178,7 +177,7 @@ describe("store-failure fail modes (SEC-06 edge case)", () => {
     store.failNext = true;
     await expect(
       recordLoginFailure("6.6.6.6", { store, now: T0 }),
-    ).rejects.toThrow(/firestore unavailable/);
+    ).rejects.toThrow(/store unavailable/);
   });
 
   it("fails open on the general bucket — resolves to allowed", async () => {
@@ -192,54 +191,29 @@ describe("store-failure fail modes (SEC-06 edge case)", () => {
   });
 });
 
-describe("createFirestoreStore — reads/writes inside one transaction", () => {
-  it("runs the mutator inside runTransaction against rate_limits/{ip}", async () => {
-    const calls: string[] = [];
-    let stored: RateLimitState | null = null;
-    const ref = { path: "rate_limits/8.8.8.8" };
-    const db = {
-      collection(name: string) {
-        calls.push(`collection:${name}`);
-        return {
-          doc(id: string) {
-            calls.push(`doc:${id}`);
-            return ref;
-          },
-        };
-      },
-      async runTransaction<T>(
-        fn: (tx: {
-          get(r: unknown): Promise<{
-            exists: boolean;
-            data(): RateLimitState | undefined;
-          }>;
-          set(r: unknown, data: RateLimitState): void;
-        }) => Promise<T>,
-      ): Promise<T> {
-        calls.push("runTransaction");
-        return fn({
-          async get(r) {
-            expect(r).toBe(ref);
-            return { exists: false, data: () => undefined };
-          },
-          set(r, data) {
-            expect(r).toBe(ref);
-            stored = data;
-          },
-        });
-      },
-    };
+describe("createInMemoryStore — read-modify-write against rate_limits/{ip}", () => {
+  it("persists state per IP across transact calls", async () => {
+    const store = createInMemoryStore();
+    await recordLoginFailure("8.8.8.8", { store, now: T0 });
+    const second = await recordLoginFailure("8.8.8.8", { store, now: T0 });
+    expect(second.blocked).toBe(false);
 
-    const store = createFirestoreStore(db);
-    const result = await recordLoginFailure("8.8.8.8", { store, now: T0 });
+    // a third transact sees loginFailures === 2 from the prior writes
+    const seen: RateLimitState[] = [];
+    await store.transact("8.8.8.8", (current) => {
+      seen.push(current);
+      return { next: current, output: undefined };
+    });
+    expect(seen[0].loginFailures).toBe(2);
+  });
 
-    expect(calls).toEqual([
-      "collection:rate_limits",
-      "doc:8.8.8.8",
-      "runTransaction",
-    ]);
-    expect(result.blocked).toBe(false);
-    expect(stored).not.toBeNull();
-    expect(stored!.loginFailures).toBe(1);
+  it("starts an unknown IP from emptyState()", async () => {
+    const store = createInMemoryStore();
+    let observed: RateLimitState | null = null;
+    await store.transact("9.9.9.9", (current) => {
+      observed = current;
+      return { next: current, output: undefined };
+    });
+    expect(observed).toEqual(emptyState());
   });
 });

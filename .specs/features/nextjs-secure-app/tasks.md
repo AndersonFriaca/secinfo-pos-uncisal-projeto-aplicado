@@ -266,6 +266,8 @@ T7 → T8
 
 #### T8: Firestore-backed store with the in-memory L1 cache
 
+> **Superseded by Amendment 5 (AD-009)**: the Firestore adapter was removed. `web/lib/security/rate-limit.ts` now ships only `createInMemoryStore()` (a process-local `Map`); the L1 cache and pure core logic are unchanged. The checklist below reflects the task as originally executed.
+
 **What**: The persistence adapter — transactional Firestore reads/writes plus the in-process cache that short-circuits already-blocked IPs.
 **Where**: `web/lib/security/rate-limit.ts`
 **Depends on**: T7
@@ -682,7 +684,7 @@ T22 → T23 → T24
 - Skill: NONE
 
 **Done when**:
-- [x] `google_project_service` resources enable `identitytoolkit.googleapis.com`, `firestore.googleapis.com`, `iamcredentials.googleapis.com`, `iap.googleapis.com`, `apikeys.googleapis.com` (and `iam`/`sts` per Amendment 2)
+- [x] `google_project_service` resources enable `identitytoolkit.googleapis.com`, `iamcredentials.googleapis.com`, `iap.googleapis.com`, `apikeys.googleapis.com` (and `iam`/`sts` per Amendment 2; `firestore` was added then removed, `firebase` added — Amendment 5)
 - [x] `google_identity_platform_config` sets `sign_in.email.enabled = true` and `password_required = true`, with `depends_on` the API enablement
 - [x] `google_apikeys_key` for the Identity Platform REST calls, restricted to `identitytoolkit.googleapis.com`, output as a `sensitive` value (the `IDENTITY_PLATFORM_API_KEY` GitHub secret)
 - [x] Terraform gate passes
@@ -695,6 +697,8 @@ T22 → T23 → T24
 ---
 
 #### T23: Firestore database
+
+> **Superseded by Amendment 5 (AD-009 / AD-010)**: `infra/firestore.tf` was deleted, the database destroyed via Terraform, and `firestore.googleapis.com` dropped. `infra/firebase.tf` (`google_firebase_project`, google-beta) was added in its place. The checklist below reflects the task as originally executed.
 
 **What**: The Native-mode Firestore database backing the rate-limit counters.
 **Where**: `infra/firestore.tf`

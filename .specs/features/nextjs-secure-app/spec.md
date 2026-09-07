@@ -16,7 +16,7 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 
 | Feature | Reason |
 | --- | --- |
-| Database for application data (beyond auth + rate-limit counters) | PRD explicitly waives any database requirement; Firestore here is used only for security counters. |
+| Any database | PRD explicitly waives any database requirement; auth state lives in Firebase Auth / Identity Platform and the rate-limit counters are a process-local in-memory store (AD-009). |
 | Password reset flow | PRD requires only login, an internal page, and logout; signup + verification is already beyond that. Adds another email round-trip and screens. |
 | Social / OAuth / MFA sign-in providers | Email+password satisfies the requirement; each extra provider adds config surface and (for SAML/OIDC) leaves the free tier. |
 | Multi-user roles / authorization levels | No requirement for it; every authenticated user sees the same dashboard. |
@@ -34,8 +34,8 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 | Auth architecture | **Server-only**: Next.js Route Handlers call `identitytoolkit.googleapis.com` REST (`accounts:signInWithPassword`, `accounts:signUp`, `accounts:sendOobCode`) with a server-held API key, then mint a Firebase **session cookie** via the Admin SDK. No Firebase client SDK, no `NEXT_PUBLIC_*` variable, no config in the browser bundle. | User requirement: "as ENVs não poderão ser expostas". Google's standard client-SDK flow publishes the API key in the bundle by design; the REST+session-cookie flow keeps every credential server-side and fits SSR. Endpoints verified against Google's Identity Platform REST reference. | y |
 | User provisioning | Public self-service signup screen | User choice (PRD requires only login/dashboard/logout). | y |
 | Email verification | **Required** before the dashboard is reachable | User choice. Identity Platform sends the verification email itself via `accounts:sendOobCode` (`requestType=VERIFY_EMAIL`), so no SMTP infrastructure is needed. | y |
-| Rate-limit / brute-force store | Pluggable `RateLimitStore`; **shipped default is a process-local in-memory store**, Firestore adapter retained and available (AD-009). Fronted by an in-process L1 cache | User chose the in-memory store for now (single VM instance, no cross-instance state needed); Firestore stays provisioned and one `configureRateLimitStore` call away for durability across deploys. The L1 cache still short-circuits an already-blocked IP before any store call. | y |
-| Identity Platform provisioning | Terraform (`google_identity_platform_config`, plus enabling `identitytoolkit.googleapis.com`) | User choice. The Admin SDK service-account key stays out of Terraform (it would land in state) — it is created once and stored as a GitHub secret / VM file. | y |
+| Rate-limit / brute-force store | **Process-local in-memory store** (`createInMemoryStore`, a `Map`), fronted by an in-process L1 block cache (AD-009). No database | User chose the in-memory store — single VM instance, no cross-instance state, 60-second block windows. Firestore was removed entirely (resource + API + adapter) to cut dependencies. Counters reset on restart; acceptable at this scale. | y |
+| Firebase Auth provisioning | Terraform: `google_firebase_project` (google-beta provider) marks the project as Firebase-enabled, `google_identity_platform_config` configures email/password sign-in, `google_project_service` enables `firebase.googleapis.com` + `identitytoolkit.googleapis.com` | User choice — full Firebase project, not just the Identity Platform config. `google-beta` is in `required_providers` solely for `google_firebase_project`. The Admin SDK uses the VM's default service account (ADC), so no SA key in Terraform state. | y |
 | GitHub Actions → GCP authentication | **Workload Identity Federation** (no service-account JSON key in GitHub) | User choice; matches the course's security framing. Provisioned in Terraform alongside the rest. | y |
 | Deploy target discovery | Pipeline resolves the VM's current IP with `gcloud compute instances describe` at deploy time | The VM uses an ephemeral IP by design (see the infra feature's free-tier decision), so no fixed address exists to hardcode. | y |
 | VM stopped at deploy time | Pipeline starts it and waits for `RUNNING`, then resolves the new ephemeral IP and deploys — no static-IP reservation (that stays in `ops/vm-start.sh` for the operator) | User choice — a merge must never fail because the VM was idle. The ephemeral IP is fine for CI: it only needs *some* address to health-check and already resolves it dynamically. | y |
@@ -48,7 +48,7 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 | Node.js version on the VM | The startup script must install **Node.js 24 LTS** (NodeSource), replacing the `apt` `nodejs` package | Verified: Ubuntu 24.04's `apt` ships Node 18.19, but `next@16.3.4` declares `engines.node >= 20.9.0`. The current `infra/scripts/startup.sh.tpl` would produce a VM that cannot run the built app. Node 24 is the active LTS line and matches the CI runner. | y — infra change required |
 | Stack versions | Next.js 16.3.4, React 19.2.8, TypeScript, `firebase-admin` 14.3.0, shadcn/ui CLI 4.21.0, Vitest 5.0.0 | Resolved from the npm registry at planning time, not assumed. | y |
 | Build location | The app is built in GitHub Actions and deployed as a Next.js `output: "standalone"` bundle | The e2-micro has 1 GB RAM and 2 shared vCPU — a Next.js production build on it would be slow and risks OOM. | y |
-| Firestore free tier | 1 GiB stored, 50k reads/day, 20k writes/day, 20k deletes/day, 10 GiB egress/month, available in any region | Confirmed via Google's pricing/quota documentation. The authoritative pricing page could not be fetched in full (truncated), so the region-independence point rests on secondary sources — re-verify before relying on it for anything larger than counters. | y — minor caveat |
+| Firebase / Identity Platform free tier | Identity Platform bills per MAU with a free monthly allowance; email/password sign-in for a coursework-scale user count stays free | Google's Identity Platform pricing. `google_firebase_project` itself is free — it only marks the project as Firebase-enabled. | y |
 
 **Open questions:** none — every ambiguity is resolved or recorded above.
 
@@ -137,7 +137,7 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 
 **Acceptance Criteria**:
 
-1. WHEN a login attempt from an IP fails THEN the system SHALL increment that IP's consecutive-failure counter in the rate-limit store (a pluggable `RateLimitStore`; the shipped default is a process-local in-memory store, with a Firestore-backed adapter available — see AD-009). <!-- event-driven -->
+1. WHEN a login attempt from an IP fails THEN the system SHALL increment that IP's consecutive-failure counter in the process-local in-memory rate-limit store (`web/lib/security/rate-limit.ts`; AD-009). <!-- event-driven -->
 2. WHEN an IP reaches 5 consecutive failed login attempts THEN the system SHALL block that IP for 60 seconds and respond to further login attempts with HTTP 429 and a `Retry-After` header. <!-- event-driven -->
 3. WHILE an IP is blocked the system SHALL reject its login attempts without calling Identity Platform at all. <!-- state-driven -->
 4. WHEN a login succeeds THEN the system SHALL reset that IP's failure counter to zero. <!-- event-driven -->
@@ -247,23 +247,23 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 
 ---
 
-### P1: Terraform — Identity Platform, Firestore, and Workload Identity Federation ⭐ MVP
+### P1: Terraform — Firebase Auth, Identity Platform, and Workload Identity Federation ⭐ MVP
 
 **User Story**: As the operator, I want the app's GCP dependencies provisioned as code alongside the existing infrastructure, so that the environment is reproducible.
 
-**Why P1**: Without Identity Platform and Firestore the app cannot run; without WIF the pipeline cannot deploy.
+**Why P1**: Without Firebase Auth / Identity Platform the app cannot run; without WIF the pipeline cannot deploy.
 
 **Acceptance Criteria**:
 
-1. The system SHALL enable `identitytoolkit.googleapis.com`, `firestore.googleapis.com`, `iamcredentials.googleapis.com`, `iap.googleapis.com`, and `apikeys.googleapis.com` through `google_project_service` resources. <!-- ubiquitous -->
-2. The system SHALL configure Identity Platform with email/password sign-in enabled via `google_identity_platform_config` (`sign_in.email.enabled = true`, `password_required = true`). <!-- ubiquitous -->
-3. The system SHALL create a Firestore database in Native mode in the same region as the VM (`us-east1`). <!-- ubiquitous -->
+1. The system SHALL enable `identitytoolkit.googleapis.com`, `firebase.googleapis.com`, `iamcredentials.googleapis.com`, `iap.googleapis.com`, and `apikeys.googleapis.com` through `google_project_service` resources. There SHALL be no database service (`firestore.googleapis.com`) — the rate limiter is in-memory (AD-009). <!-- ubiquitous -->
+2. The system SHALL provision Firebase on the project with `google_firebase_project` (google-beta provider) and configure email/password sign-in via `google_identity_platform_config` (`sign_in.email.enabled = true`, `password_required = true`). <!-- ubiquitous -->
+3. The system SHALL NOT create any database resource. The rate-limit / brute-force counters live in a process-local in-memory store in `web/lib/security/rate-limit.ts`. <!-- ubiquitous -->
 4. The system SHALL create a Workload Identity Pool and an OIDC provider for GitHub Actions, plus a deploy service account bound to it, restricted by an attribute condition to this repository only. <!-- ubiquitous -->
 5. The deploy service account SHALL hold instance-scoped `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor` on the app VM, `roles/iam.serviceAccountUser` (SA-scoped) on the VM's attached service account, and its only project-scoped grant SHALL be **one custom role limited to compute read/list and operation-get permissions**; it SHALL hold **no predefined project role**, and never `roles/owner` or `roles/editor`. Start/stop/setMetadata are instance-scoped. <!-- ubiquitous -->
 6. The system SHALL provision the Identity Platform API key as a `google_apikeys_key` restricted to `identitytoolkit.googleapis.com`, and SHALL expose it — together with the Workload Identity provider resource name and the deploy service-account email — as Terraform outputs so they can be copied into GitHub secrets (the API key output marked `sensitive`). <!-- ubiquitous -->
 7. IF any of these resources is added THEN `terraform destroy` in `infra/` SHALL still complete without manual intervention. <!-- unwanted-behavior -->
 
-**Independent Test**: `terraform apply` creates all resources with no error; `terraform output -raw identity_platform_api_key` prints a key string and `gcloud services api-keys list` shows it restricted to `identitytoolkit.googleapis.com`; `gcloud identity-platform config describe` (or the console) shows email sign-in enabled; `gcloud firestore databases list` shows a Native-mode database in `us-east1`; `gcloud compute instances get-iam-policy app-vm` shows the deploy SA with `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor`; `gcloud projects get-iam-policy <project>` shows the deploy SA bound only to `projects/<id>/roles/deployVmOperator` (no predefined project role); `gcloud iam roles describe deployVmOperator --project=<id>` lists only read/list/operations-get permissions; `terraform destroy` then `terraform apply` round-trips cleanly.
+**Independent Test**: `terraform apply` creates all resources with no error; `terraform output -raw identity_platform_api_key` prints a key string and `gcloud services api-keys list` shows it restricted to `identitytoolkit.googleapis.com`; `gcloud identity-platform config describe` (or the console) shows email sign-in enabled; `gcloud firebase projects list` shows the project as a Firebase project; `gcloud firestore databases list` shows **no** database; `gcloud compute instances get-iam-policy app-vm` shows the deploy SA with `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor`; `gcloud projects get-iam-policy <project>` shows the deploy SA bound only to `projects/<id>/roles/deployVmOperator` (no predefined project role); `gcloud iam roles describe deployVmOperator --project=<id>` lists only read/list/operations-get permissions; `terraform destroy` then `terraform apply` round-trips cleanly.
 
 ---
 
@@ -304,8 +304,8 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 ## Edge Cases
 
 - IF the Identity Platform API key is missing or invalid at runtime THEN the login and signup routes SHALL return HTTP 503 with a generic message and log the misconfiguration server-side, rather than crashing the process.
-- IF the rate-limit store is unreachable when the limiter tries to read or write THEN the system SHALL fail **closed** for login attempts (reject with 503) rather than allowing unlimited attempts — availability of a login form matters less than the brute-force guarantee. (Moot for the in-memory default, which cannot be "unreachable"; still enforced for a Firestore-backed store.)
-- WHEN two requests from the same IP race at the boundary of the 5th failure THEN the limiter SHALL apply the counter update atomically so the threshold cannot be skipped — a synchronous read-modify-write for the in-memory store (single-threaded Node), a transaction for the Firestore adapter.
+- IF the rate-limit store throws unexpectedly THEN the system SHALL fail **closed** for login attempts (reject with 503) and fail **open** for the general bucket. The in-memory store cannot throw here; the guard stays because `checkRateLimit` is written against the `RateLimitStore` interface and a test injects a throwing fake.
+- WHEN two requests from the same IP race at the boundary of the 5th failure THEN the limiter SHALL apply the counter update atomically so the threshold cannot be skipped — the in-memory store's `transact` does a synchronous read-modify-write and Node is single-threaded, so the two cannot interleave.
 - IF a user's account is deleted or disabled while their session cookie is still valid THEN `verifySessionCookie(..., checkRevoked: true)` SHALL reject it on the next protected request.
 - WHEN the verification email link is clicked THEN Identity Platform's own hosted handler marks the account verified; the app SHALL re-check `emailVerified` on the next login rather than caching the previous value.
 - IF the deploy runs while a previous PM2 process is still serving THEN the pipeline SHALL replace the bundle and reload PM2 so that the port is never left unbound.
@@ -378,13 +378,13 @@ The infrastructure from [`gcp-infra-terraform`](../gcp-infra-terraform/spec.md) 
 | CICD-07 | P1: Continuous deployment to the VM | Design | Pending |
 | CICD-08 | P1: Continuous deployment to the VM | Design | Pending |
 | CICD-09 | P1: Continuous deployment to the VM | Done | `.github/workflows/release.yml` + `release-please-config.json` |
-| TF-01 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
-| TF-02 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
-| TF-03 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
-| TF-04 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
-| TF-05 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
-| TF-06 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
-| TF-07 | P1: Terraform — Identity Platform, Firestore, WIF | Design | Pending |
+| TF-01 | P1: Terraform — Firebase Auth, Identity Platform, WIF | Design | Pending |
+| TF-02 | P1: Terraform — Firebase Auth, Identity Platform, WIF | Design | Pending |
+| TF-03 | P1: Terraform — Firebase Auth, Identity Platform, WIF | Design | Pending |
+| TF-04 | P1: Terraform — Firebase Auth, Identity Platform, WIF | Design | Pending |
+| TF-05 | P1: Terraform — Firebase Auth, Identity Platform, WIF | Design | Pending |
+| TF-06 | P1: Terraform — Firebase Auth, Identity Platform, WIF | Design | Pending |
+| TF-07 | P1: Terraform — Firebase Auth, Identity Platform, WIF | Design | Pending |
 | VM-01 | P1: VM runtime prepared for Next.js | Design | Pending |
 | VM-02 | P1: VM runtime prepared for Next.js | Design | Pending |
 | VM-03 | P1: VM runtime prepared for Next.js | Design | Pending |

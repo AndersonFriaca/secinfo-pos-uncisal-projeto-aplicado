@@ -1,12 +1,14 @@
-# Application GCP services and Identity Platform sign-in configuration
-# (TF-01, TF-02). These back the Next.js app in `web/`: Identity Platform for
-# auth, Firestore for the rate-limit counters, IAM Credentials for the keyless
-# GitHub Actions deploy path.
+# Application GCP services and Firebase Authentication (Identity Platform)
+# sign-in configuration (TF-01, TF-02). These back the Next.js app in `web/`:
+# Firebase Auth / Identity Platform for auth, IAM Credentials for the keyless
+# GitHub Actions deploy path. The rate limiter uses a process-local in-memory
+# store (AD-009) — no database.
 
 locals {
   app_services = [
     "identitytoolkit.googleapis.com",
-    "firestore.googleapis.com",
+    # Firebase project enablement (google_firebase_project, firebase.tf).
+    "firebase.googleapis.com",
     # Service Accounts + custom roles for the keyless deploy identity, and the
     # STS endpoint google-github-actions/auth exchanges the GitHub OIDC token at.
     "iam.googleapis.com",
@@ -35,7 +37,8 @@ resource "google_project_service" "app" {
 }
 
 # Enable email/password sign-in (TF-02). `password_required = true` forces the
-# email + password flow (no passwordless email-link sign-in).
+# email + password flow (no passwordless email-link sign-in). This is the
+# Firebase Authentication config for the project provisioned in firebase.tf.
 resource "google_identity_platform_config" "default" {
   project = var.project_id
 
@@ -46,7 +49,19 @@ resource "google_identity_platform_config" "default" {
     }
   }
 
-  depends_on = [google_project_service.app]
+  depends_on = [google_firebase_project.default]
+}
+
+# One-time cleanup: destroy the retired Firestore database. The rate limiter is
+# now an in-memory store (AD-009); the previous commit set its deletion_policy
+# to DELETE, so this removal deletes it from GCP rather than orphaning it.
+# Safe to delete this block once `terraform apply` has run.
+removed {
+  from = google_firestore_database.default
+
+  lifecycle {
+    destroy = true
+  }
 }
 
 # The API key the app's Route Handlers pass as `?key=` when calling the

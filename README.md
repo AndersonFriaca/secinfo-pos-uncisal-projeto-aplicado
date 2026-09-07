@@ -78,9 +78,8 @@ o carrega.
   sucesso ou quando o bloqueio expira. A lógica de decisão (limiares
   injetados, relógio injetado) está em
   [`web/lib/security/rate-limit-core.ts`](web/lib/security/rate-limit-core.ts);
-  o store (por padrão em memória no processo; adaptador Firestore disponível e
-  a infra provisionada), com um cache em processo que rejeita um IP já
-  bloqueado sem ida ao store, está em
+  o store (um `Map` em memória no processo, sem banco de dados), com um cache
+  em processo que rejeita um IP já bloqueado sem ida ao store, está em
   [`web/lib/security/rate-limit.ts`](web/lib/security/rate-limit.ts). Ele é
   ligado à rota de login em
   [`web/app/api/auth/login/route.ts`](web/app/api/auth/login/route.ts). A

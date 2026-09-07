@@ -126,7 +126,7 @@ describe("POST /api/auth/login (T14)", () => {
   it("rate-limit store failure → 503 generic body", async () => {
     const d = deps({
       checkRateLimit: vi.fn(async () => {
-        throw new Error("firestore unavailable");
+        throw new Error("store unavailable");
       }),
     });
     const res = await handleLogin(formRequest(CREDS), d);

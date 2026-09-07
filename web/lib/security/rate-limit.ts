@@ -1,13 +1,11 @@
 /**
- * Persistence adapter for the rate limiter: a transactional store plus the
- * in-process L1 cache that short-circuits already-blocked IPs.
+ * Persistence adapter for the rate limiter: a process-local in-memory store
+ * plus the in-process L1 cache that short-circuits already-blocked IPs.
  *
  * Every decision is delegated to `rate-limit-core.ts`; this module only stores
- * and caches. The default store is process-local memory
- * (`createInMemoryStore`); `createFirestoreStore` remains available for a
- * durable, multi-instance store and can be wired with
- * `configureRateLimitStore`. The Route Handlers that use it run on the Node
- * runtime (AD-005).
+ * and caches. The store is `createInMemoryStore()` — a `Map` kept in the Node
+ * process (AD-009). Counters reset on every restart; this deployment runs a
+ * single VM instance, so no shared or durable store is needed.
  *
  * Requirements: SEC-03, SEC-06, SEC-07.
  */
@@ -26,9 +24,9 @@ import {
 /**
  * A transactional key-value store for `rate_limits/{ip}`. The mutator receives
  * the current state (or a fresh {@link emptyState} for an unknown IP) and
- * returns the state to persist plus a value to return to the caller. The whole
- * read-modify-write runs atomically so concurrent requests cannot skip the
- * 5th-failure threshold.
+ * returns the state to persist plus a value to return to the caller. The
+ * read-modify-write runs synchronously so concurrent requests cannot skip the
+ * 5th-failure threshold. Kept as an interface so tests can inject a fake.
  */
 export type RateLimitStore = {
   transact<T>(
@@ -67,9 +65,8 @@ function cachedBlock(ip: string, now: number): number | null {
  * process.
  *
  * Counters live only in memory: they reset on every deploy/restart and are not
- * shared across instances. This deployment runs a single VM instance, so that
- * is acceptable; use {@link createFirestoreStore} + {@link configureRateLimitStore}
- * for a durable, multi-instance store.
+ * shared across instances. This deployment runs a single VM instance with
+ * 60-second block windows, so that is acceptable (AD-009).
  */
 export function createInMemoryStore(): RateLimitStore {
   const states = new Map<string, RateLimitState>();
@@ -83,26 +80,18 @@ export function createInMemoryStore(): RateLimitStore {
   };
 }
 
-// --- default store wiring ----------------------------------------------------
+// --- default store ---------------------------------------------------------
 
 let defaultStore: RateLimitStore | null = null;
 
-/** Swap the default store (e.g. to a Firestore-backed one) at startup. */
-export function configureRateLimitStore(store: RateLimitStore): void {
-  defaultStore = store;
-}
-
-/** Test-only: forget the wired store so the next call rebuilds the default. */
+/** Test-only: drop the process store so the next call rebuilds a fresh one. */
 export function __resetRateLimitStore(): void {
   defaultStore = null;
 }
 
 function requireStore(explicit?: RateLimitStore): RateLimitStore {
   if (explicit) return explicit;
-  if (!defaultStore) {
-    defaultStore = createInMemoryStore();
-  }
-  return defaultStore;
+  return (defaultStore ??= createInMemoryStore());
 }
 
 // --- client IP resolution (SEC-06) -----------------------------------------
@@ -234,48 +223,6 @@ export async function resetLoginFailures(
     next: coreResetLoginFailures(current),
     output: undefined,
   }));
-}
-
-// --- Firestore store -------------------------------------------------------
-
-type FirestoreSnapshot = { exists: boolean; data(): RateLimitState | undefined };
-type FirestoreDocRef = unknown;
-type FirestoreTransaction = {
-  get(ref: FirestoreDocRef): Promise<FirestoreSnapshot>;
-  set(ref: FirestoreDocRef, data: RateLimitState): void;
-};
-
-/** The subset of the Admin SDK `Firestore` object this adapter needs. */
-export type FirestoreLike = {
-  collection(name: string): { doc(id: string): FirestoreDocRef };
-  runTransaction<T>(fn: (tx: FirestoreTransaction) => Promise<T>): Promise<T>;
-};
-
-/**
- * A {@link RateLimitStore} backed by a Firestore database. Reads and writes
- * `rate_limits/{ip}` inside a single transaction (the spec's concurrency edge
- * case). Written against a structural type so this module never imports
- * `firebase-admin` — the caller passes a live `Firestore` instance.
- */
-export function createFirestoreStore(
-  db: FirestoreLike,
-  collectionName = "rate_limits",
-): RateLimitStore {
-  return {
-    async transact(ip, mutator) {
-      const ref = db.collection(collectionName).doc(ip);
-      return db.runTransaction(async (tx) => {
-        const snapshot = await tx.get(ref);
-        const current =
-          snapshot.exists && snapshot.data()
-            ? (snapshot.data() as RateLimitState)
-            : emptyState();
-        const { next, output } = mutator(current);
-        tx.set(ref, next);
-        return output;
-      });
-    },
-  };
 }
 
 /** Re-exported so Route Handlers can size their own windows if needed. */

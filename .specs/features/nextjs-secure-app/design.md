@@ -26,14 +26,13 @@ graph TD
     Pages -->|cookies + verifySessionCookie| Admin[firebase-admin]
     API -->|signInWithPassword / signUp / sendOobCode| IDP[(Identity Platform REST)]
     API -->|createSessionCookie / revokeRefreshTokens| Admin
-    API -->|rate limit + brute force| Limiter[Rate limiter<br/>L1 memory → RateLimitStore]
-    Limiter --> Store[(RateLimitStore<br/>in-memory default · Firestore adapter)]
+    API -->|rate limit + brute force| Limiter[Rate limiter<br/>L1 block cache + in-memory store]
 
     GH[GitHub Actions] -->|WIF, no static key| GCP[gcloud: resolve IP, start VM]
     GH -->|scp bundle + pm2 reload over IAP tunnel, ephemeral SSH key| VMBox[/opt/app on the VM, owned by appsvc/]
 ```
 
-**Why the split matters:** `proxy.ts` runs on the **Edge runtime**, where `firebase-admin` and the Firestore SDK cannot run (they need Node APIs). So the proxy is limited to what Web Crypto and plain header work can do — headers, Origin checks, CSRF token comparison — and everything requiring the Admin SDK or Firestore (session verification, rate-limit counters) lives in Route Handlers and Server Components, which run on Node. This is a hard runtime boundary, not a preference.
+**Why the split matters:** `proxy.ts` runs on the **Edge runtime**, where `firebase-admin` cannot run (it needs Node APIs). So the proxy is limited to what Web Crypto and plain header work can do — headers, Origin checks, CSRF token comparison — and everything requiring the Admin SDK (session verification) plus the rate-limit counters lives in Route Handlers and Server Components, which run on Node. This is a hard runtime boundary, not a preference.
 
 ---
 
@@ -44,7 +43,7 @@ graph TD
 | Approach | Trade-off | Verdict |
 | --- | --- | --- |
 | **A. Single app; proxy.ts does headers/Origin/CSRF, Route Handlers do auth + rate limiting** (chosen) | One deployable, one process, one PM2 entry — fits a 1 GB e2-micro. Requires being deliberate about which control runs on which runtime. | **Recommended.** Matches the spec's server-only constraint and the VM's resources; the runtime split is a real constraint either way, so making it explicit costs nothing. |
-| B. Force `proxy.ts` onto the Node runtime and centralise every control there | All security logic in one file; rate limiting could reject before routing. | Rejected — Node-runtime middleware is a newer, less-exercised path, and putting Firestore I/O in front of *every* request (including static asset requests that slip the matcher) risks burning the free-tier write quota. |
+| B. Force `proxy.ts` onto the Node runtime and centralise every control there | All security logic in one file; rate limiting could reject before routing. | Rejected — Node-runtime middleware is a newer, less-exercised path, and running the limiter in front of *every* request (including static asset requests that slip the matcher) adds work to paths that do not need it. |
 | C. Next.js frontend + separate auth service (Express/Nest) | Clean separation; auth reusable. | Rejected — two processes on a 1 GB VM, two deploy paths, two attack surfaces, for a prototype with one login form. |
 | D. Client-side Firebase SDK + `/api/session` exchange (Google's standard sample) | Least custom code; the documented happy path. | Rejected by an explicit user decision — it publishes the Firebase config in the client bundle, which violates the "no exposed ENVs" requirement. |
 
@@ -59,7 +58,7 @@ graph TD
 | Nginx reverse proxy to `localhost:3000` | `infra/scripts/startup.sh.tpl` (stage 10) | Already points at the port this app will bind. No change needed beyond `server_tokens off`. |
 | PM2 + `pm2 startup` boot survival | `infra/scripts/startup.sh.tpl` (stage 9) | The app is registered with the existing PM2 instance; `pm2 save` makes it survive reboots. |
 | `infra/scripts/ecosystem.config.js` | Same | Already declares `name: nextjs-app`, `cwd: /opt/app`, `PORT: 3000`. Needs its `script`/`args` pointed at the standalone server. |
-| Terraform main root + provider config | `infra/*.tf` | New GCP resources (Identity Platform, Firestore, WIF) are added here, reusing `user_project_override`/`billing_project` already set. |
+| Terraform main root + provider config | `infra/*.tf` | New GCP resources (Firebase project, Identity Platform, WIF) are added here, reusing `user_project_override`/`billing_project` already set. `google-beta` is added to `required_providers` for `google_firebase_project`. |
 | VM start/stop with IP reservation | `ops/vm-start.sh`, `ops/vm-stop.sh` | Operator-only. The deploy workflow does **not** reproduce the reservation: when the VM is stopped it just runs `gcloud compute instances start`, waits for `RUNNING`, and reads the new ephemeral IP (CICD-04). The static-IP reservation stays here for the operator's stable-IP-for-a-session need. |
 | `.gitignore` secret patterns | `.gitignore` | Extended with `.env*` app-level entries; the existing rules already block `.env`, keys, and tfvars. |
 | Free-tier and teardown documentation | `docs/` | New app docs slot in beside them; the OWASP section lands in `README.md` per DOCS-01. |
@@ -69,7 +68,7 @@ graph TD
 | System | Integration |
 | --- | --- |
 | Identity Platform | Server-side REST over HTTPS with an API key held in `/opt/app/.env.production` (chmod 600), never in the repo or the bundle |
-| Firestore | Admin SDK from Route Handlers only, using Application Default Credentials from the VM's service account |
+| Firebase Admin SDK | Route Handlers only (session cookie mint/verify/revoke), using Application Default Credentials from the VM's service account |
 | Nginx | Sets `X-Forwarded-For`; the app reads its left-most entry for client IP (SEC-06) |
 | GitHub Actions | WIF → short-lived GCP token → `gcloud` for IP resolution, VM start, and `compute scp`/`ssh --tunnel-through-iap` for the file transfer and remote commands. gcloud mints an ephemeral IAM-scoped SSH key from the deploy SA identity — no key stored anywhere. Remote file ops run under `sudo` (ephemeral login user in `google-sudoers`) and hand ownership to `appsvc`. |
 
@@ -81,7 +80,7 @@ graph TD
 
 - **Purpose**: The single place every request passes through before routing. Generates the CSP nonce, sets the full OWASP header set, enforces same-origin on `/api/*`, and validates the CSRF token on state-changing requests.
 - **Location**: `web/proxy.ts` (beside `web/app/`)
-- **Runtime**: Edge. **No `firebase-admin`, no Firestore, no Node-only API here.**
+- **Runtime**: Edge. **No `firebase-admin`, no Node-only API here.**
 - **Interfaces**:
   - `export function proxy(request: NextRequest): NextResponse`
   - `export const config = { matcher: [...] }` — matches everything except `_next/static`, `_next/image`, and `favicon.ico`; unlike the Next.js sample it **does not** exclude `/api`, because API routes need the Origin and CSRF checks.
@@ -122,10 +121,10 @@ graph TD
   - `resetLoginFailures(ip: string): Promise<void>`
 - **Design**:
   - **L1 (memory)**: a `Map<ip, { blockedUntil: number }>`. A request from an IP with `blockedUntil > now` is rejected immediately, with **no store read or write** (SEC-07) — this is what stops a sustained attack from consuming a backing store's daily quota.
-  - **L2 (`RateLimitStore`)**: a pluggable transactional key-value store keyed `rate_limits/{ip}`. The shipped default (`createInMemoryStore`) is a process-local `Map`; its `transact` does a synchronous read-modify-write, which on single-threaded Node cannot interleave and skip the 5th-failure threshold. `createFirestoreStore` is retained for a durable, cross-instance store (collection `rate_limits`, updated inside a Firestore transaction) and is wired with `configureRateLimitStore` — see AD-009.
+  - **L2 (`createInMemoryStore`)**: a process-local `Map` keyed by IP (`rate_limits/{ip}`). Its `transact` does a synchronous read-modify-write, which on single-threaded Node cannot interleave and skip the 5th-failure threshold. `RateLimitStore` stays an interface so a test can inject a throwing fake; there is no other implementation (AD-009). Counters reset on process restart.
   - Thresholds are injected, not hardcoded at call sites: 5 failures → 60s block; `auth` bucket 10 req/min; `general` bucket 100 req/min.
   - `now` is an injectable parameter so tests can drive the clock deterministically instead of sleeping.
-- **Failure mode**: if the store throws during a **login** attempt (only possible with a network-backed store like Firestore), `checkRateLimit` propagates and the route returns 503 — failing **closed**, per the spec's edge case. The general limiter fails open (a 100 req/min cap is not a security guarantee worth taking the site down for). The in-memory default cannot throw here.
+- **Failure mode**: if the store throws during a **login** attempt, `checkRateLimit` propagates and the route returns 503 — failing **closed**, per the spec's edge case. The general limiter fails open (a 100 req/min cap is not a security guarantee worth taking the site down for). The in-memory store cannot actually throw; the branch is kept and unit-tested with an injected throwing fake so the contract survives if a network-backed store is ever added.
 - **Requirements**: SEC-01..SEC-07, SEC-25..SEC-27
 
 ### `lib/auth/identity-platform.ts` — server-side REST client
@@ -203,13 +202,13 @@ PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_E
 
 **Secrets consumed** (all from GitHub Actions secrets, never the repo): `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY`. `GCP_REGION` is no longer consumed — dropping the static-IP reservation removed the only region-scoped call. No SSH key or SSH-user secret — VM access is entirely through the WIF-federated deploy SA over an IAP tunnel.
 
-### Terraform additions — `infra/app.tf`
+### Terraform additions — `infra/app.tf`, `infra/firebase.tf`, `infra/wif.tf`
 
 | Resource | Purpose |
 | --- | --- |
-| `google_project_service` × 3 | `identitytoolkit`, `firestore`, `iamcredentials` (TF-01) |
+| `google_project_service` | `identitytoolkit`, `firebase`, `iam`, `iamcredentials`, `sts`, `iap`, `apikeys` — no `firestore` (TF-01) |
+| `google_firebase_project` (google-beta) | Marks the project as Firebase-enabled (TF-02) |
 | `google_identity_platform_config` | `sign_in.email.enabled = true`, `password_required = true` (TF-02) |
-| `google_firestore_database` | Native mode, `location_id = "us-east1"` (TF-03) |
 | `google_iam_workload_identity_pool` + `..._provider` | GitHub OIDC (`issuer_uri = "https://token.actions.githubusercontent.com"`), `attribute_mapping` for `google.subject`/`attribute.repository`/`attribute.repository_owner`, and an `attribute_condition` restricting to this repository (TF-04) |
 | `google_service_account` + `google_service_account_iam_member` / `google_compute_instance_iam_member` / `google_iap_tunnel_instance_iam_member` / `google_project_iam_custom_role` + `google_project_iam_member` | Deploy SA bound with `roles/iam.workloadIdentityUser` to the `principalSet://` for this repo; `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor` scoped to `google_compute_instance.vm` only; `roles/iam.serviceAccountUser` scoped to the VM's attached (default compute) service account only; one minimal custom project role `deployVmOperator` (compute read/list + operation-get only). No predefined project role, never `roles/owner`/`roles/editor` (TF-05) |
 | `google_compute_firewall` `allow-iap-ssh` (in `infra/firewall.tf`, alongside the existing rules) + `iap.googleapis.com` service | `tcp:22` from the IAP range `35.235.240.0/20` to `web-server`-tagged instances — the ingress path for the keyless deploy. Additive: `allow-ssh` still opens `:22` to `var.operator_ssh_cidrs` (default `0.0.0.0/0`, for the evaluation board; key-only + Fail2Ban regardless). |
@@ -219,22 +218,20 @@ PM2 runs `node current/server.js` as the `appsvc` user with `PORT=3000`, `NODE_E
 
 ## Data Models
 
-### RateLimitStore record — `rate_limits/{ip}` (in-memory map value by default; a Firestore doc with the adapter)
+### Rate-limit state — `rate_limits/{ip}` (a value in the in-memory `Map`)
 
 ```ts
-type RateLimitDoc = {
-  ip: string                  // document ID; the left-most X-Forwarded-For entry
+type RateLimitState = {
   loginFailures: number       // consecutive failed logins; reset to 0 on success
   blockedUntil: number | null // epoch ms; null when not blocked
   authWindowStart: number     // epoch ms, start of the current 1-minute auth bucket
   authCount: number
   generalWindowStart: number
   generalCount: number
-  updatedAt: number
 }
 ```
 
-One document per IP, written inside a transaction. No TTL policy is configured (a TTL would be a nicety, not a requirement, and the document count for a coursework project stays trivially small).
+One `Map` entry per IP (key = left-most `X-Forwarded-For` entry), read-modified-written synchronously. The whole map lives in the Node process and is discarded on restart.
 
 ### Session cookie payload
 
@@ -263,14 +260,13 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 
 | Concern | Location | Impact | Mitigation |
 | --- | --- | --- | --- |
-| `proxy.ts` runs on the Edge runtime — `firebase-admin`/Firestore cannot run there | `proxy.ts` | Putting session verification or rate limiting in the proxy would fail at runtime, possibly only in production | Hard boundary documented above: proxy does headers/Origin/CSRF only; everything Admin-SDK- or Firestore-backed lives in Route Handlers and Server Components |
+| `proxy.ts` runs on the Edge runtime — `firebase-admin` cannot run there | `proxy.ts` | Putting session verification in the proxy would fail at runtime, possibly only in production | Hard boundary documented above: proxy does headers/Origin/CSRF only; everything Admin-SDK-backed lives in Route Handlers and Server Components |
 | Node 18 on the VM vs `next@16` requiring ≥20.9 | `infra/scripts/startup.sh.tpl` | The deployed bundle would refuse to start | Its own spec story (VM-01..02): install Node 24 LTS from NodeSource, verified by `node --version` on a fresh boot |
 | The `principalSet://` member format for the WIF binding is intricate and easy to get subtly wrong | `infra/app.tf` | A wrong member silently grants nothing (deploy fails to authenticate) or too much | The design specifies the `attribute.repository/OWNER/REPO` form, but the implementing task must confirm it against the current provider docs before applying — the same "verify, don't guess" discipline that caught the Certbot plugin issue in the infra feature |
 | CSP with a nonce forces every page dynamic — no static optimisation, no PPR | whole app | Slower first byte, more CPU per request on a shared-core e2-micro | Accepted: SSR is an explicit requirement, and traffic is a grader plus a few test hits. Documented so it isn't mistaken for a misconfiguration |
 | `COEP: require-corp` breaks any cross-origin subresource that doesn't opt in | `lib/security/headers.ts` | A future third-party script or CDN font would silently fail to load | Safe today (shadcn is local source, `next/font` self-hosts). Flagged in the spec's assumptions so the trade-off is visible before someone adds a CDN |
 | `X-Forwarded-For` is client-controllable in principle | `lib/security/rate-limit.ts` | A spoofed header could let an attacker rotate "IPs" and dodge the block | Nginx is the only ingress and overwrites the header for direct traffic; documented as a known limitation rather than claimed as airtight |
-| In-memory default store resets on every deploy/restart | `lib/security/rate-limit.ts` | Every counter (not just the L1 fast path) is forgotten on restart, so a block does not survive a deploy | Accepted for now (AD-009): single VM instance, 60s block windows, restarts are rare and operator-driven. `configureRateLimitStore(createFirestoreStore(db))` restores durability without touching call sites. The L1 cache still bounds an attack's store writes to the number of *distinct* IPs |
-| A Firestore-backed store would face the 20k writes/day free tier | `lib/security/rate-limit.ts` | A sustained attack could exhaust it and (fail-closed) take login down | Only relevant once the Firestore adapter is wired; the L1 memory cache short-circuits already-blocked IPs before any store call (SEC-07) |
+| In-memory store resets on every deploy/restart | `lib/security/rate-limit.ts` | Every counter (not just the L1 fast path) is forgotten on restart, so a block does not survive a deploy | Accepted (AD-009): single VM instance, 60s block windows, restarts are rare and operator-driven. A restart mid-attack costs one extra failed attempt per IP before the block re-forms. No durable store, no database dependency |
 | Ephemeral SSH key / sshd propagation lag on a just-started VM | `.github/workflows/deploy.yml` | The first `gcloud compute ssh --tunnel-through-iap` after a VM start can fail for ~30-60s while the key reaches instance metadata and the guest agent applies it | The deploy's first remote call retries in a `for i in $(seq 1 12); do ... sleep 5; done` loop before the bundle transfer |
 | Verification email deliverability is Google's default sender | Identity Platform | Mail may land in spam, blocking signup end-to-end | Out of our control without a custom SMTP domain (explicitly out of scope); `/verify-email` offers a resend, and the operator can flip `emailVerified` in the console if a demo is blocked |
 
@@ -283,7 +279,8 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 | Security-gate file | `proxy.ts` exporting `proxy()`, not `middleware.ts` | Next.js 16 renamed the convention; verified against the 16.3.4 CSP guide rather than assumed from older tutorials |
 | Where session verification happens | In Server Components / Route Handlers, never in `proxy.ts` | Edge runtime cannot load `firebase-admin`; a fast cookie-presence check in the proxy would be a convenience, not the authority |
 | CSP strategy | Per-request nonce with `'strict-dynamic'`, forcing dynamic rendering | The spec forbids `'unsafe-inline'`; nonce is the approach Next.js documents, and SSR is required anyway so the cost is already paid |
-| Rate-limit store | Pluggable `RateLimitStore`; in-memory default, Firestore adapter retained (AD-009) + in-process L1 cache | User chose the in-memory store for now (single instance); Firestore stays provisioned and one `configureRateLimitStore` call away. L1 keeps a backing store's write quota safe under attack |
+| Rate-limit store | Process-local in-memory `Map` + in-process L1 block cache (AD-009) | User chose the in-memory store; Firestore removed entirely (resource, API, adapter) to cut dependencies. Single VM instance, 60s blocks — durability across restarts is not worth a database |
+| Firebase Auth provisioning | `google_firebase_project` (google-beta) + `google_identity_platform_config` | User chose a full Firebase project, not just the Identity Platform config. `google-beta` is added to `required_providers` for this one resource; every other resource stays on the GA `google` provider |
 | Login failure mode when the store is down | Fail closed (503) | A login form that stays up without brute-force protection is worse than one that is briefly unavailable |
 | Error message policy | One generic message for every credential failure, and for every signup rejection | Prevents account enumeration (OWASP Identification and Authentication Failures) |
 | Build location | GitHub Actions, deploying a `standalone` bundle | 1 GB RAM on the VM makes on-host builds slow and OOM-prone |

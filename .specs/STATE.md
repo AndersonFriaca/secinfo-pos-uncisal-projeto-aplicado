@@ -78,12 +78,13 @@ public repository or a public page.
 `proxy.ts` runs on the Edge runtime and therefore handles only what Web Crypto
 and header manipulation allow: CSP nonce generation, the OWASP response-header
 set, same-origin enforcement, and CSRF token comparison. Everything requiring
-`firebase-admin` or Firestore — session verification, rate limiting, brute-force
-counters — runs in Route Handlers and Server Components on the Node runtime.
+`firebase-admin` (session verification) plus the in-memory rate-limit /
+brute-force counters runs in Route Handlers and Server Components on the Node
+runtime.
 
-**Why**: `firebase-admin` and the Firestore SDK need Node APIs that the Edge
-runtime does not provide. Placing them in the proxy fails at runtime, sometimes
-only in production.
+**Why**: `firebase-admin` needs Node APIs that the Edge runtime does not
+provide. Placing it in the proxy fails at runtime, sometimes only in
+production.
 
 ### AD-006 — Verify third-party API surfaces before committing to them
 
@@ -180,37 +181,60 @@ not edit it manually. The release PR itself passes `ci.yml` (only touches
 package.json/CHANGELOG/manifest). Nothing reaches the VM until a release PR is
 merged (or `Deploy` is run manually via `workflow_dispatch`).
 
-### AD-009 — Rate-limit store: in-memory by default, Firestore adapter retained
+### AD-009 — Rate-limit store: in-memory only, Firestore removed entirely
+
+**Status**: active (supersedes the earlier "Firestore adapter retained" form)
+**Feature**: `nextjs-secure-app`
+
+The rate limiter uses `createInMemoryStore()` — a process-local `Map`, lazily
+built by `requireStore()`. There is no other store: `createFirestoreStore`,
+`FirestoreLike`, and `configureRateLimitStore` were deleted. `RateLimitStore`
+stays as an interface only so `checkRateLimit`'s fail-closed branch can be
+unit-tested with an injected throwing fake. Firestore is gone from infra too —
+`infra/firestore.tf` deleted, `firestore.googleapis.com` dropped from
+`local.app_services`, and `google_firestore_database.default` destroyed via a
+`removed { ... lifecycle { destroy = true } }` block (after a prior commit set
+`deletion_policy = "DELETE"`, since the default `ABANDON` would only drop it
+from state).
+
+**Why**: `configureRateLimitStore` was never called anywhere in production, so
+every `/api/auth/*` POST would have thrown "rate-limit store not configured" on
+a real request. The deployment is a single VM instance with no cross-instance
+state need and 60-second block windows, so a process-local store is sufficient.
+User asked to remove Firestore completely — fewer dependencies, nothing dead in
+the project.
+
+**Consequence**: rate-limit counters reset on every deploy/restart — one extra
+failed attempt per IP before a block re-forms. Revisit only if the app ever
+runs more than one instance. SEC-01/SEC-03/SEC-07 and the spec's rate-limit
+edge cases reworded for the in-memory store.
+
+### AD-010 — Firebase Auth provisioned via `google_firebase_project` (google-beta)
 
 **Status**: active
 **Feature**: `nextjs-secure-app`
 
-The rate limiter's `RateLimitStore` default is `createInMemoryStore()` — a
-process-local `Map`, lazily built by `requireStore()` when nothing has been
-wired. `createFirestoreStore()` and `configureRateLimitStore()` stay in the
-module; `infra/firestore.tf` and `firestore.googleapis.com` stay provisioned
-(user: "manter o firestore no momento"). Switching to durable storage is one
-call — `configureRateLimitStore(createFirestoreStore(db))` at Route Handler
-startup — with no change to call sites or `rate-limit-core.ts`.
+`infra/firebase.tf` adds `google_firebase_project.default` (provider
+`google-beta`), which marks the GCP project as Firebase-enabled — Firebase
+Authentication is now fully Terraform-provisioned, not just the Identity
+Platform config. `firebase.googleapis.com` is in `local.app_services`.
+`google-beta` is added to `infra/main.tf` `required_providers` (`~> 5.0`) and a
+`provider "google-beta"` block mirrors the `google` one; it is used by this one
+resource only. `google_identity_platform_config.default` now
+`depends_on = [google_firebase_project.default]`. No `google_firebase_web_app`
+— the app is server-side only (AD-004), so there is no client SDK config to
+emit.
 
-**Why**: `configureRateLimitStore` was never actually called anywhere in
-production code, so every `/api/auth/*` POST would have thrown "rate-limit store
-not configured" on a real request. The deployment is a single VM instance with
-no cross-instance state need and 60-second block windows, so a process-local
-store is sufficient and removes the Firestore round-trip from the hot path. The
-in-process L1 block cache is unchanged.
-
-**Consequence**: rate-limit counters (not just the L1 fast path) reset on every
-deploy/restart. Acceptable given rare, operator-driven restarts; revisit if the
-app ever runs more than one instance. SEC-01/SEC-07 and the spec's rate-limit
-edge cases were reworded to be store-agnostic; the fail-closed-on-login
-guarantee still holds for a network-backed store.
+**Why**: user asked for Firebase Auth creation/provisioning via Terraform. A
+full Firebase project (vs. only Identity Platform) is what shows up in the
+Firebase console and is the conventional shape. The one extra provider is the
+minimum cost for that.
 
 ## Handoff
 
 **Feature**: `nextjs-secure-app` — **COMPLETE**. Execute done (T1-T30, 5 sequential sub-agent batches), independent Verifier **PASS** on re-verification 1/3, minor residual gaps R1/R3 cleaned up.
 **Phase**: done. `validate_state.py nextjs-secure-app` exits 0. `validation.md` verdict PASS.
-**Completed**: full `web/` Next.js 16 app (**149 unit tests** / 15 files passing; lint, typecheck, build clean); `infra/app.tf` / `infra/firestore.tf` / `infra/wif.tf` (terraform fmt + validate clean on `infra/` and `infra/bootstrap/`); `infra/scripts/startup.sh.tpl` (Node 24 LTS from NodeSource, `/opt/app` chowned, `server_tokens off`); `infra/scripts/ecosystem.config.js` (standalone `node current/server.js`); `.github/workflows/ci.yml` (PR test gate) and `.github/workflows/deploy.yml` (WIF keyless deploy). README documents four OWASP Top 10:2025 categories with verified file paths; `docs/application.md` added.
+**Completed**: full `web/` Next.js 16 app (**149 unit tests** / 15 files passing; lint, typecheck, build clean); `infra/app.tf` / `infra/firebase.tf` / `infra/wif.tf` (terraform fmt + validate clean on `infra/` and `infra/bootstrap/`); `infra/scripts/startup.sh.tpl` (Node 24 LTS from NodeSource, `/opt/app` chowned, `server_tokens off`); `infra/scripts/ecosystem.config.js` (standalone `node current/server.js`); `.github/workflows/ci.yml` (PR test gate) and `.github/workflows/deploy.yml` (WIF keyless deploy). README documents four OWASP Top 10:2025 categories with verified file paths; `docs/application.md` added.
 **Verifier findings resolved**: 7 gaps from the first FAIL pass fixed in `c3a21d0..63ef549` (CSRF constant-time proof, `/dashboard` no-store assertion, CSRF cookie attribute assertions, unverified-email→`/verify-email` redirect via `getSessionState`, SEC-18 relabel, landing-nav helper+tests, X-Forwarded-For trust note). Re-verification: all 3 previously-surviving mutants killed, no regression. Residual R1/R3 (dashboard-guard helper + test, nav describe label) fixed in `f16468d`/`a26927272`. Carried spec-precision gaps documented in `validation.md`: 307-vs-303 redirects (framework constraint), dev-mode `'unsafe-eval'`, inspection-only ACs.
 **Feature commit range**: `cc46312..HEAD` (~41 commits on `main`).
 **In progress**: nothing.
@@ -225,6 +249,8 @@ guarantee still holds for a network-backed store.
 
 **Amendment 4 (AD-009 + pt-BR UI)**: rate-limit store default switched to `createInMemoryStore()` (`requireStore()` builds it lazily; Firestore adapter + `configureRateLimitStore` retained, `infra/firestore.tf` untouched). All user-visible strings in `web/` translated to pt-BR: the five pages, `lib/nav.ts` labels, `app/layout.tsx` metadata description + `<html lang="pt-BR">`, and the API route error/ack message constants (`login`, `signup`, `resend-verification`). Tests updated: `lib/nav.test.ts`, `app/api/auth/login/route.test.ts`, `app/api/auth/signup/route.test.ts`; `rate-limit.test.ts` gains an in-memory-default block + `createInMemoryStore` isolation test. **151 tests pass** (was 149), lint/typecheck/build clean. spec/design reworded store-agnostic; SEC-01/SEC-07 + edge cases updated.
 
+**Amendment 5 (AD-009 final + AD-010, Firestore out / Firebase project in)**: Firestore removed everywhere — `web/lib/security/rate-limit.ts` drops `createFirestoreStore`/`FirestoreLike`/`configureRateLimitStore` (in-memory `createInMemoryStore` only, `requireStore` lazy-builds it); `infra/firestore.tf` deleted; `firestore.googleapis.com` dropped from `app.tf`; `google_firestore_database` torn down (commit `884e92c` set `deletion_policy = "DELETE"`, then a `removed` block in `app.tf` destroys it). Firebase Auth provisioned via new `infra/firebase.tf` `google_firebase_project` (google-beta added to `required_providers` + a `provider "google-beta"` block in `main.tf`); `firebase.googleapis.com` enabled; `google_identity_platform_config` depends on it. `.terraform.lock.hcl` gains the google-beta v5.45.2 hash. Tests: `rate-limit.test.ts` Firestore block replaced with `createInMemoryStore` tests, `"firestore unavailable"` → `"store unavailable"` in `rate-limit.test.ts` + `login/route.test.ts`. **152 tests pass**, lint/typecheck/build clean, `terraform validate` + `plan` clean (plan: 2 add, 1 change, 2 destroy). spec TF story + SEC-01/03/07 + assumptions + edge cases + non-goals + free-tier reworded; design.md rate-limit + Terraform + tech-decisions sections updated; docs updated.
+
 ### Operator: still-open live items
 - `terraform apply` the new `infra/` resources (custom role `deployVmOperator` included), then `terraform output` for the two GitHub secrets. First real deploy is the true test of the IAP permission set — same "only-found-live" class as the two `startup.sh.tpl` bugs in `CLAUDE.md`.
 - GitHub secrets: `GCP_PROJECT_ID`, `GCP_ZONE`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY` (no `GCP_REGION`, no SSH secrets).
@@ -235,10 +261,12 @@ guarantee still holds for a network-backed store.
 ### Operator live steps (deferred — need an authenticated GCP account + a running VM)
 
 1. **GitHub repo + secrets.** Push to the GitHub repo and configure Actions secrets: `GCP_PROJECT_ID`, `GCP_ZONE` (known values from `terraform.tfvars`), and `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA_EMAIL`, `IDENTITY_PLATFORM_API_KEY` — all three from `terraform -chdir=infra output -raw <name>` (`wif_provider_name`, `deploy_service_account_email`, `identity_platform_api_key`) after step 2. The API key is a `google_apikeys_key` restricted to `identitytoolkit.googleapis.com`, provisioned in `infra/app.tf`. **`GCP_REGION` is no longer used** (Amendment 2 dropped the CI static-IP reservation). No SSH key or SSH-user secret — the CI deploy is keyless over an IAP tunnel (AD-007); operator/board SSH to public `:22` is unchanged.
-2. **`terraform apply` the new resources.** In `infra/`: applies `google_project_service` (identitytoolkit, firestore, iam, iamcredentials, sts, iap, apikeys), `google_identity_platform_config`, `google_apikeys_key` (the Identity Platform API key, restricted to `identitytoolkit.googleapis.com`), `google_firestore_database` (Native, `us-east1`), the Workload Identity pool/provider, and the `allow-iap-ssh` firewall rule. If the `apikeys` API was just enabled, `google_apikeys_key` may fail on the first apply with a propagation error — re-run `terraform apply` once. The deploy SA's `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor` are **instance-scoped** (`google_compute_instance_iam_member` / `google_iap_tunnel_instance_iam_member` on `app-vm`) and `roles/iam.serviceAccountUser` is scoped to the VM's default compute SA — the deploy SA gets no project-level role. Verify the `principalSet://` member resolved to this repo, and that `gcloud projects get-iam-policy` shows no deploy-SA binding.
+2. **`terraform apply` the new resources.** First run `terraform -chdir=infra init -upgrade` (adds the `google-beta` provider). Sequence:
+   - `terraform apply` on commit `884e92c` alone flips `google_firestore_database.default` `deletion_policy` ABANDON → DELETE (no other change).
+   - `terraform apply` on the Firestore-removal commit then: creates `google_project_service["firebase.googleapis.com"]` + `google_firebase_project.default` (google-beta), **destroys** `google_firestore_database.default` and `google_project_service["firestore.googleapis.com"]`, updates `google_identity_platform_config` to depend on the Firebase project. Also applies (if not already) `google_apikeys_key` (restricted to `identitytoolkit.googleapis.com`), the Workload Identity pool/provider, and the `allow-iap-ssh` firewall rule. If `apikeys`/`firebase` was just enabled, a resource may fail once on a propagation error — re-run `terraform apply`. The deploy SA's `roles/compute.instanceAdmin.v1` and `roles/iap.tunnelResourceAccessor` are **instance-scoped** (`google_compute_instance_iam_member` / `google_iap_tunnel_instance_iam_member` on `app-vm`) and `roles/iam.serviceAccountUser` is scoped to the VM's default compute SA — the deploy SA gets no project-level role. Verify the `principalSet://` member resolved to this repo, and that `gcloud projects get-iam-policy` shows no deploy-SA binding.
    - **Public `:22` stays open** (`allow-ssh` from `operator_ssh_cidrs`, default `["0.0.0.0/0"]`) so the evaluation board can SSH in directly — key-only + Fail2Ban (4/24h) per PRD Eixo 1. Narrow `operator_ssh_cidrs` in `terraform.tfvars` to harden. `gcloud compute ssh <user>@app-vm --tunnel-through-iap` also works for principals with `roles/iap.tunnelResourceAccessor`.
 3. **Rebuild the VM for Node 24 + `appsvc`.** The updated `startup.sh.tpl` only takes effect on a fresh boot / instance recreation. It now also provisions the locked `appsvc` user that owns `/opt/app` and runs PM2. After it runs, confirm `node --version` reports `v24.x`, `pm2 list` works, `systemctl status pm2-appsvc` is active, `test -w /opt/app` as `appsvc`, and `curl -sI https://<ip>/ | grep -i '^server:'` shows no version.
 4. **Merge to `main`, then merge the `release-please` PR** it opens — the release PR merge is what cuts the `vX.Y.Z` tag and (via `release.yml` calling `deploy.yml`) triggers the deploy. A plain push to `main` no longer deploys; `workflow_dispatch` on `Deploy` forces a manual redeploy. The deploy itself: WIF auth (no key), dynamic IP resolution, `gcloud compute scp/ssh --tunnel-through-iap` (ephemeral SSH key, no stored key), bundle to `/opt/app/releases/<sha>` via `sudo install -o appsvc`, `current` symlink flip, `.env.production` copied chmod 600 owned by `appsvc`, PM2 reload as `appsvc`, health poll to HTTP 200.
-5. **Run every "Independent Test" in `spec.md`** against the live VM: landing page 200 + no `NEXT_PUBLIC_`/Firebase config in HTML; signup weak/strong password; login byte-identical failures + `Set-Cookie` attributes + no client-bundle Identity Platform reference; dashboard 303 without cookie / 200 with / 303 after logout-replay; six failed logins → 429 `Retry-After: 60` with the 6th never reaching Identity Platform; `curl -sI` full OWASP header set + absence checks + foreign-`Origin` 403; PR shows a red check on a broken assertion; merge produces a green deploy with a dynamic IP and a 200 health poll; `terraform destroy` then `apply` round-trips.
+5. **Run every "Independent Test" in `spec.md`** against the live VM: landing page 200 + no `NEXT_PUBLIC_`/Firebase config in HTML; signup weak/strong password; login byte-identical failures + `Set-Cookie` attributes + no client-bundle Identity Platform reference; dashboard 303 without cookie / 200 with / 303 after logout-replay; six failed logins → 429 `Retry-After: 60` with the 6th never reaching Identity Platform; `curl -sI` full OWASP header set + absence checks + foreign-`Origin` 403; PR shows a red check on a broken assertion; merge produces a green deploy with a dynamic IP and a 200 health poll; `gcloud firebase projects list` shows the project, `gcloud firestore databases list` shows none; `terraform destroy` then `apply` round-trips.
 
 **Branch**: `main`.
