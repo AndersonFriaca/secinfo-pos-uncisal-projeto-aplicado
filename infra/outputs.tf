@@ -12,3 +12,9 @@ output "deploy_service_account_email" {
   description = "Email of the deploy service account GitHub Actions impersonates (GitHub secret GCP_DEPLOY_SA_EMAIL)."
   value       = google_service_account.deploy.email
 }
+
+output "identity_platform_api_key" {
+  description = "Identity Platform browser API key the app uses server-side (GitHub secret IDENTITY_PLATFORM_API_KEY / /opt/app/.env.production). Read with: terraform -chdir=infra output -raw identity_platform_api_key"
+  value       = google_apikeys_key.identity_platform.key_string
+  sensitive   = true
+}

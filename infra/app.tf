@@ -16,6 +16,9 @@ locals {
     # through an IAP tunnel (gcloud compute ssh --tunnel-through-iap), so no
     # SSH key or SSH-user secret is stored anywhere.
     "iap.googleapis.com",
+    # API Keys API: lets Terraform provision the Identity Platform browser API
+    # key below instead of the operator creating one by hand in the console.
+    "apikeys.googleapis.com",
   ]
 }
 
@@ -40,6 +43,32 @@ resource "google_identity_platform_config" "default" {
     email {
       enabled           = true
       password_required = true
+    }
+  }
+
+  depends_on = [google_project_service.app]
+}
+
+# The API key the app's Route Handlers pass as `?key=` when calling the
+# Identity Platform REST API (web/lib/auth/identity-platform.ts). This is the
+# value of the GitHub secret IDENTITY_PLATFORM_API_KEY and of
+# /opt/app/.env.production's IDENTITY_PLATFORM_API_KEY on the VM.
+#
+# Restricted to the Identity Toolkit API only, so a leak cannot be used against
+# any other GCP API. No application (referrer/IP) restriction: the callers are
+# the VM and GitHub-hosted runners, whose egress IPs are not fixed. The key is
+# server-held per AD-004 — never shipped to the browser.
+#
+# The key string is stored in Terraform state (the private GCS state bucket).
+# Read it with: terraform -chdir=infra output -raw identity_platform_api_key
+resource "google_apikeys_key" "identity_platform" {
+  project      = var.project_id
+  name         = "identity-platform-server"
+  display_name = "Identity Platform (server-side REST, app auth)"
+
+  restrictions {
+    api_targets {
+      service = "identitytoolkit.googleapis.com"
     }
   }
 

@@ -682,8 +682,9 @@ T22 → T23 → T24
 - Skill: NONE
 
 **Done when**:
-- [x] `google_project_service` resources enable `identitytoolkit.googleapis.com`, `firestore.googleapis.com`, and `iamcredentials.googleapis.com`
+- [x] `google_project_service` resources enable `identitytoolkit.googleapis.com`, `firestore.googleapis.com`, `iamcredentials.googleapis.com`, `iap.googleapis.com`, `apikeys.googleapis.com` (and `iam`/`sts` per Amendment 2)
 - [x] `google_identity_platform_config` sets `sign_in.email.enabled = true` and `password_required = true`, with `depends_on` the API enablement
+- [x] `google_apikeys_key` for the Identity Platform REST calls, restricted to `identitytoolkit.googleapis.com`, output as a `sensitive` value (the `IDENTITY_PLATFORM_API_KEY` GitHub secret)
 - [x] Terraform gate passes
 
 **Tests**: none (Terraform config layer; static validation is the gate)

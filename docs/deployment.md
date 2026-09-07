@@ -96,6 +96,22 @@ Assim que você de fato publicar um build Next.js em `/opt/app` e rodar `pm2
 start ecosystem.config.js && pm2 save` na VM, `https://<ip>/` passa a servir a
 aplicação em vez de `502`.
 
+## 6. Configure os secrets do GitHub Actions
+
+O workflow de deploy (`.github/workflows/deploy.yml`) lê cinco secrets. Três
+saem direto dos outputs do Terraform:
+
+```bash
+terraform -chdir=infra output -raw wif_provider_name           # → GCP_WIF_PROVIDER
+terraform -chdir=infra output -raw deploy_service_account_email # → GCP_DEPLOY_SA_EMAIL
+terraform -chdir=infra output -raw identity_platform_api_key    # → IDENTITY_PLATFORM_API_KEY
+```
+
+Os outros dois são valores que você já conhece: `GCP_PROJECT_ID` e `GCP_ZONE`
+(os mesmos do `terraform.tfvars`). Não há secret de chave SSH — o deploy
+alcança a VM por um túnel IAP com uma chave efêmera (veja
+[security.md](security.md)).
+
 ## Operação do dia a dia
 
 Para iniciar/parar a VM (o que também trata da dança de reserva/liberação do
