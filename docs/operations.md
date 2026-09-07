@@ -101,7 +101,7 @@ na mão**. O fluxo:
    `web/CHANGELOG.md`.
 3. Fazer merge desse PR cria a tag anotada `vX.Y.Z` e o GitHub Release com as
    notas do changelog — e **só esse merge** dispara o deploy na VM
-   (`release.yml` chama `deploy.yml`, gated em `release_created`). Um push
+   (`release.yml` chama `deploy.yml`, gated em `releases_created`). Um push
    comum em `main` não faz deploy; `workflow_dispatch` no workflow `Deploy`
    força um redeploy manual do `main` atual.
 
