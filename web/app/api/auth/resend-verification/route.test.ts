@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleResendVerification, type ResendDeps } from "./route";
+import { handleResendVerification, type ResendDeps } from "./handler";
 
 function formRequest(fields: Record<string, string>): Request {
   return new Request("http://localhost/api/auth/resend-verification", {

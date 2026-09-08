@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleLogout, type LogoutDeps } from "./route";
+import { handleLogout, type LogoutDeps } from "./handler";
 import type { SessionClaims } from "../../../../lib/auth/session";
 
 function request(cookie?: string): Request {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleLogin, type LoginDeps } from "./route";
+import { handleLogin, type LoginDeps } from "./handler";
 
 function formRequest(fields: Record<string, string>): Request {
   return new Request("http://localhost/api/auth/login", {

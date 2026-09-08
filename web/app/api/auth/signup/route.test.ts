@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleSignup, type SignupDeps } from "./route";
+import { handleSignup, type SignupDeps } from "./handler";
 
 function formRequest(fields: Record<string, string>): Request {
   return new Request("http://localhost/api/auth/signup", {
