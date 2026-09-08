@@ -30,6 +30,27 @@ function generateNonce(): string {
   return Buffer.from(crypto.randomUUID()).toString("base64");
 }
 
+/**
+ * The origin this request was actually made to, as the browser sees it.
+ *
+ * Behind the VM's Nginx the app is reached over HTTPS but proxied to plain
+ * `http://localhost:3000`, so `request.nextUrl` can carry the wrong scheme (and
+ * `localhost` host). Trust `X-Forwarded-Proto` / `X-Forwarded-Host` — set by our
+ * own Nginx (`infra/scripts/startup.sh.tpl`) — when both are present, taking the
+ * first value of any comma-joined list. Falls back to `nextUrl.origin` locally
+ * and in tests, where there is no proxy.
+ */
+function ownOrigin(request: NextRequest): string {
+  const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const host =
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
+    request.headers.get("host")?.split(",")[0]?.trim();
+  if (proto && host) {
+    return `${proto}://${host}`;
+  }
+  return request.nextUrl.origin;
+}
+
 /** The request's `Origin`, or the origin of its `Referer` when `Origin` is absent. */
 function requestOrigin(request: NextRequest): string | null {
   const origin = request.headers.get("origin");
@@ -90,21 +111,21 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const csp = securityHeaders["Content-Security-Policy"];
 
   const method = request.method.toUpperCase();
-  const ownOrigin = request.nextUrl.origin;
+  const expectedOrigin = ownOrigin(request);
 
   // Any /api/* request carrying a foreign Origin is rejected outright (SEC-13).
   const rawOrigin = request.headers.get("origin");
   if (
     request.nextUrl.pathname.startsWith("/api") &&
     rawOrigin &&
-    rawOrigin !== ownOrigin
+    rawOrigin !== expectedOrigin
   ) {
     return forbidden(securityHeaders);
   }
 
   // State-changing methods: same-origin required, then a matching CSRF token.
   if (!SAFE_METHODS.has(method)) {
-    if (requestOrigin(request) !== ownOrigin) {
+    if (requestOrigin(request) !== expectedOrigin) {
       return forbidden(securityHeaders);
     }
     const submitted = await submittedCsrfToken(request);

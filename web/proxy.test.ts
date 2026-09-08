@@ -178,6 +178,44 @@ describe("proxy — same-origin + CSRF on state-changing requests (SEC-13, SEC-2
     expect(res.status).toBe(403);
   });
 
+  it("treats X-Forwarded-Proto/Host as the real origin behind a proxy", async () => {
+    const token = generateCsrfToken();
+    const headers = new Headers({
+      // nextUrl of this request is http://internal:3000, but the browser hit
+      // https://app.example through Nginx.
+      origin: "https://app.example",
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "app.example",
+      cookie: `csrf_token=${token}`,
+      "x-csrf-token": token,
+    });
+    const res = await proxy(
+      new NextRequest(new URL("http://internal:3000/api/auth/login"), {
+        method: "POST",
+        headers,
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("still rejects a foreign Origin when forwarded headers are set", async () => {
+    const token = generateCsrfToken();
+    const headers = new Headers({
+      origin: "https://evil.example",
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "app.example",
+      cookie: `csrf_token=${token}`,
+      "x-csrf-token": token,
+    });
+    const res = await proxy(
+      new NextRequest(new URL("http://internal:3000/api/auth/login"), {
+        method: "POST",
+        headers,
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
   it("rejects a state-changing request with no token (403)", async () => {
     const res = await post({ cookieToken: null, headerToken: null });
     expect(res.status).toBe(403);
