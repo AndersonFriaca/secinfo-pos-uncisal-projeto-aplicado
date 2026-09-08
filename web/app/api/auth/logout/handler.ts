@@ -55,7 +55,10 @@ export async function handleLogout(
   return new Response(null, {
     status: 303,
     headers: {
-      location: new URL("/", request.url).toString(),
+      // Relative Location — see login/handler.ts: an absolute URL from
+      // request.url leaks the internal http://localhost:3000 the Nginx proxy
+      // forwards to, which the browser's form-action 'self' CSP then blocks.
+      location: "/",
       "set-cookie": clearedCookie(),
       "cache-control": "no-store",
     },

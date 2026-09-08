@@ -60,11 +60,14 @@ function json(
   });
 }
 
-function redirect(path: string, request: Request): Response {
+function redirect(path: string): Response {
   return new Response(null, {
     status: 303,
     headers: {
-      location: new URL(path, request.url).toString(),
+      // Relative Location — see the note in login/handler.ts: an absolute URL
+      // from request.url leaks the internal http://localhost:3000 and trips
+      // the browser's form-action 'self' CSP.
+      location: path,
       "cache-control": "no-store",
     },
   });
@@ -129,6 +132,6 @@ export async function handleSignup(
   }
 
   await deps.sendVerificationEmail(created.idToken);
-  return redirect("/verify-email", request);
+  return redirect("/verify-email");
 }
 

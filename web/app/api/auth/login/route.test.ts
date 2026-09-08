@@ -40,7 +40,7 @@ describe("POST /api/auth/login (T14)", () => {
     const d = deps();
     const res = await handleLogin(formRequest(CREDS), d);
     expect(res.status).toBe(303);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/dashboard");
+    expect(res.headers.get("location")).toBe("/dashboard");
     const cookie = res.headers.get("set-cookie")!;
     expect(cookie).toContain("__session=SESSION_COOKIE_VALUE");
     expect(cookie).toContain("Max-Age=43200");
@@ -92,7 +92,7 @@ describe("POST /api/auth/login (T14)", () => {
     const d = deps({ isEmailVerified: () => false });
     const res = await handleLogin(formRequest(CREDS), d);
     expect(res.status).toBe(303);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/verify-email");
+    expect(res.headers.get("location")).toBe("/verify-email");
     expect(res.headers.get("set-cookie")).toBeNull();
     expect(d.createSession).not.toHaveBeenCalled();
   });

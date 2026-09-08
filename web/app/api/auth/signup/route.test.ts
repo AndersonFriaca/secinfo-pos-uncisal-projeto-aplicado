@@ -33,7 +33,7 @@ describe("POST /api/auth/signup (T13)", () => {
       d,
     );
     expect(res.status).toBe(303);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/verify-email");
+    expect(res.headers.get("location")).toBe("/verify-email");
     expect(d.signUp).toHaveBeenCalledWith("new@example.com", STRONG);
     expect(d.sendVerificationEmail).toHaveBeenCalledWith("id-1");
     expect(res.headers.get("cache-control")).toBe("no-store");

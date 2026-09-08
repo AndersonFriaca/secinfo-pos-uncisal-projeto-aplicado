@@ -30,7 +30,7 @@ describe("POST /api/auth/logout (T15)", () => {
     const d = fakeDeps({ "good-cookie": { uid: "u1", email_verified: true } });
     const res = await handleLogout(request("__session=good-cookie"), d);
     expect(res.status).toBe(303);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/");
+    expect(res.headers.get("location")).toBe("/");
     expect(d.revokeSession).toHaveBeenCalledWith("u1");
     const setCookie = res.headers.get("set-cookie")!;
     expect(setCookie).toContain("__session=;");

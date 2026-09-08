@@ -82,13 +82,17 @@ function json(
 
 function redirect(
   path: string,
-  request: Request,
   extraHeaders: Record<string, string> = {},
 ): Response {
   return new Response(null, {
     status: 303,
     headers: {
-      location: new URL(path, request.url).toString(),
+      // Relative Location (RFC 7231 §7.1.2): the browser resolves it against
+      // the URL it actually requested. Building an absolute URL from
+      // `request.url` would embed the internal `http://localhost:3000` the
+      // Nginx proxy forwards to, and the browser's `form-action 'self'` CSP
+      // then blocks the cross-origin navigation.
+      location: path,
       "cache-control": "no-store",
       ...extraHeaders,
     },
@@ -175,11 +179,11 @@ export async function handleLogin(
   await deps.resetLoginFailures(ip);
 
   if (!deps.isEmailVerified(result.idToken)) {
-    return redirect("/verify-email", request);
+    return redirect("/verify-email");
   }
 
   const cookie = await deps.createSession(result.idToken);
-  return redirect("/dashboard", request, {
+  return redirect("/dashboard", {
     "set-cookie": serializeSessionCookie(cookie),
   });
 }
