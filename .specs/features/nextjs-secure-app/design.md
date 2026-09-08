@@ -57,7 +57,7 @@ graph TD
 | --- | --- | --- |
 | Nginx reverse proxy to `localhost:3000` | `infra/scripts/startup.sh.tpl` (stage 10) | Already points at the port this app will bind. No change needed beyond `server_tokens off`. |
 | PM2 + `pm2 startup` boot survival | `infra/scripts/startup.sh.tpl` (stage 9) | The app is registered with the existing PM2 instance; `pm2 save` makes it survive reboots. |
-| `infra/scripts/ecosystem.config.js` | Same | Already declares `name: nextjs-app`, `cwd: /opt/app`, `PORT: 3000`. Needs its `script`/`args` pointed at the standalone server. |
+| `infra/scripts/ecosystem.config.js` | Same | Declares `name: nextjs-app`, `cwd: /opt/app`, `script: current/server.js`, `--env-file /opt/app/.env.production`. Rewritten from the repo on every boot AND every deploy (a VM provisioned earlier kept a stale `npm start` copy). |
 | Terraform main root + provider config | `infra/*.tf` | New GCP resources (Firebase project, Identity Platform, WIF, Secret Manager) are added here, reusing `user_project_override`/`billing_project` already set. `google-beta` is added to `required_providers` for `google_firebase_project`. |
 | VM start/stop with IP reservation | `ops/vm-start.sh`, `ops/vm-stop.sh` | Operator-only. The deploy workflow does **not** reproduce the reservation: when the VM is stopped it just runs `gcloud compute instances start`, waits for `RUNNING`, and reads the new ephemeral IP (CICD-04). The static-IP reservation stays here for the operator's stable-IP-for-a-session need. |
 | `.gitignore` secret patterns | `.gitignore` | Extended with `.env*` app-level entries; the existing rules already block `.env`, keys, and tfvars. |
@@ -186,7 +186,7 @@ Route protection is **not** delegated to `proxy.ts` — the Admin SDK cannot run
 ```
 /opt/app/
 ├── current -> releases/<sha>     # symlink flipped atomically on deploy
-├── releases/<sha>/               # standalone bundle: server.js, .next/, public/
+├── releases/<sha>/               # webpack standalone bundle: server.js, .next/, node_modules/, public/
 ├── .env.production               # chmod 600 — NODE_ENV / PORT / GOOGLE_CLOUD_PROJECT only, no secret
 └── ecosystem.config.js           # rewritten from the repo on every boot AND every deploy
 ```
@@ -289,6 +289,7 @@ Not a model we define — it is Firebase's session cookie, carrying the same cla
 | Login failure mode when the store is down | Fail closed (503) | A login form that stays up without brute-force protection is worse than one that is briefly unavailable |
 | Error message policy | One generic message for every credential failure, and for every signup rejection | Prevents account enumeration (OWASP Identification and Authentication Failures) |
 | Build location | GitHub Actions, deploying a `standalone` bundle | 1 GB RAM on the VM makes on-host builds slow and OOM-prone |
+| Bundler | `next build --webpack` (Turbopack stays for `next dev`) | Next 16's Turbopack build + `output: standalone` emits external packages (`firebase-admin`, `google-auth-library`) with a content-hashed specifier its runtime can't resolve → `ERR_MODULE_NOT_FOUND` on the first Admin-SDK / Secret-Manager call. The webpack build also runs the generated route-type check, so each auth route's `handleX(request, deps)` seam moved to a sibling `handler.ts` and `route.ts` re-exports only `POST`/`runtime` |
 | Release layout | `releases/<sha>` + `current` symlink | Atomic flip, trivial rollback, no window where the served directory is half-written |
 | CI → GCP auth | Workload Identity Federation with a repository-scoped `attribute_condition` | No long-lived key in GitHub; without the condition any repo could assume the SA |
 | CI → VM auth | `gcloud compute ssh`/`scp --tunnel-through-iap`; gcloud mints an ephemeral, IAM-scoped SSH key from the WIF-federated deploy SA identity | No stored SSH key or SSH-user secret. No OS Login toggle needed — the guest agent lands ephemeral keys in `google-sudoers`. IAP tunnel means no need to widen public `:22` |
