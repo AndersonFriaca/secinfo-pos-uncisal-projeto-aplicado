@@ -58,4 +58,11 @@ describe("LoginForm", () => {
     expect(html).toContain('href="/signup"');
     expect(html).not.toContain('data-slot="card"');
   });
+
+  it("links to /forgot-password", () => {
+    const html = renderToStaticMarkup(
+      <LoginForm csrfToken="tok" error={false} />,
+    );
+    expect(html).toContain('href="/forgot-password"');
+  });
 });
