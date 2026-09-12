@@ -142,14 +142,16 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] Both rules present in `@layer base`
-- [ ] Gate check passes: `npm run lint && npm run typecheck && npm test && npm run build`
-- [ ] Test count: 158 tests pass
+- [x] Both rules present in `@layer base`
+- [x] Gate check passes: `npm run lint && npm run typecheck && npm test && npm run build`
+- [x] Test count: 158 tests pass
 
 **Tests**: none
 **Gate**: build
 
 **Commit**: `feat(web): move sidebar width variables to globals.css`
+
+**Status**: ✅ Complete (commit pending)
 
 ---
 
