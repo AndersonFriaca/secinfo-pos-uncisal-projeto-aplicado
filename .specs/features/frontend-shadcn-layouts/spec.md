@@ -141,7 +141,7 @@ The pages in `web/` were built as the minimum needed to exercise the auth flow: 
 | UI-12 | P1: Security copy lives only in docs | Execute | Implementing |
 | UI-13 | P1: Security copy lives only in docs | Execute | Implementing |
 | UI-14 | P1: Security copy lives only in docs | Execute | Implementing |
-| UI-15 | P1: Security copy lives only in docs | Tasks | In Tasks |
+| UI-15 | P1: Security copy lives only in docs | Execute | Implementing |
 | UI-16 | P1: Security copy lives only in docs | Tasks | In Tasks |
 | UI-17 | P1: Security copy lives only in docs | Tasks | In Tasks |
 | UI-18 | P2: Responsive sidebar | Design | Pending |

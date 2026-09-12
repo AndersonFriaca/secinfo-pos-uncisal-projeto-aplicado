@@ -342,15 +342,17 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `lib/site.test.ts` asserts `SITE_DESCRIPTION` is non-empty and, case-insensitively, contains none of "seguro", "OWASP", "verificação", "login", "painel"
-- [ ] `grep -n "OWASP\|verificação" web/app/layout.tsx` returns nothing
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 187 tests pass (186 + 1)
+- [x] `lib/site.test.ts` asserts `SITE_DESCRIPTION` is non-empty and, case-insensitively, contains none of "seguro", "OWASP", "verificação", "login", "painel"
+- [x] `grep -n "OWASP\|verificação" web/app/layout.tsx` returns nothing
+- [x] Gate check passes: `npm test`
+- [x] Test count: 187 tests pass (186 + 1)
 
 **Tests**: unit
 **Gate**: quick
 
 **Commit**: `refactor(web): neutral site metadata description`
+
+**Status**: ✅ Complete (commit pending)
 
 ---
 
