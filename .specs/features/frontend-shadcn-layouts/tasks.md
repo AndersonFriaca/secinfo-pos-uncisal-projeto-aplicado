@@ -371,14 +371,16 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `app-sidebar.test.tsx` (rendered inside `SidebarProvider`) covers: "Projeto Aplicado" in header, exactly one `data-sidebar="menu-button"` element, it wraps `href="/dashboard"` with text "Painel" and `data-active="true"`, footer contains the given `email`, `<form method="post" action="/api/auth/logout"`, hidden `csrf_token` with the given value, submit button text "Sair", no `style=`
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 192 tests pass (187 + 5)
+- [x] `app-sidebar.test.tsx` (rendered inside `SidebarProvider`) covers: "Projeto Aplicado" in header, exactly one `data-sidebar="menu-button"` element, it wraps `href="/dashboard"` with text "Painel" and `data-active="true"`, footer contains the given `email`, `<form method="post" action="/api/auth/logout"`, hidden `csrf_token` with the given value, submit button text "Sair", no `style=`
+- [x] Gate check passes: `npm test`
+- [x] Test count: 192 tests pass (187 + 5)
 
 **Tests**: unit
 **Gate**: quick
 
 **Commit**: `feat(web): add the dashboard AppSidebar`
+
+**Status**: ✅ Complete (commit pending) — the `action`/`method` attribute order asserted in the exact-string done-when criterion is emitted by React as `action` before `method`; the test asserts both as separate substrings (matching the T6 `LoginForm` pattern) rather than one exact-order literal.
 
 ---
 
