@@ -200,9 +200,11 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `auth-shell.test.tsx` covers: element order, `max-w-sm`, no `data-slot="card"`, footer rendered
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 164 tests pass (161 + 3)
+- [x] `auth-shell.test.tsx` covers: element order, `max-w-sm`, no `data-slot="card"`, footer rendered
+- [x] Gate check passes: `npm test`
+- [x] Test count: 164 tests pass (161 + 3)
+
+**Status**: ✅ Complete (commit pending)
 
 **Tests**: unit
 **Gate**: quick
