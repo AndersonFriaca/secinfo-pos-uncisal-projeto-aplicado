@@ -127,23 +127,23 @@ The pages in `web/` were built as the minimum needed to exercise the auth flow: 
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| UI-01 | P1: Clean auth screens | Execute | Implementing |
-| UI-02 | P1: Clean auth screens | Execute | Implementing |
-| UI-03 | P1: Clean auth screens | Execute | Implementing |
-| UI-04 | P1: Clean auth screens | Execute | Implementing |
-| UI-05 | P1: Clean auth screens | Execute | Implementing |
-| UI-06 | P1: Sidebar dashboard | Execute | Implementing |
-| UI-07 | P1: Sidebar dashboard | Execute | Implementing |
-| UI-08 | P1: Sidebar dashboard | Execute | Implementing |
-| UI-09 | P1: Sidebar dashboard | Execute | Implementing |
-| UI-10 | P1: Sidebar dashboard | Execute | Implementing |
-| UI-11 | P1: Sidebar dashboard | Execute | Implementing |
-| UI-12 | P1: Security copy lives only in docs | Execute | Implementing |
-| UI-13 | P1: Security copy lives only in docs | Execute | Implementing |
-| UI-14 | P1: Security copy lives only in docs | Execute | Implementing |
-| UI-15 | P1: Security copy lives only in docs | Execute | Implementing |
-| UI-16 | P1: Security copy lives only in docs | Execute | Implementing |
-| UI-17 | P1: Security copy lives only in docs | Execute | Implementing |
+| UI-01 | P1: Clean auth screens | Verified | Verified |
+| UI-02 | P1: Clean auth screens | Verified | Verified |
+| UI-03 | P1: Clean auth screens | Verified | Verified |
+| UI-04 | P1: Clean auth screens | Verified | Verified |
+| UI-05 | P1: Clean auth screens | Verified | Verified |
+| UI-06 | P1: Sidebar dashboard | Verified | Verified |
+| UI-07 | P1: Sidebar dashboard | Verified | Verified |
+| UI-08 | P1: Sidebar dashboard | Verified | Verified |
+| UI-09 | P1: Sidebar dashboard | Verified | Verified |
+| UI-10 | P1: Sidebar dashboard | Verified | Verified |
+| UI-11 | P1: Sidebar dashboard | Verified | Verified |
+| UI-12 | P1: Security copy lives only in docs | Verified | Verified |
+| UI-13 | P1: Security copy lives only in docs | Verified | Verified |
+| UI-14 | P1: Security copy lives only in docs | Verified | Verified |
+| UI-15 | P1: Security copy lives only in docs | Verified | Verified |
+| UI-16 | P1: Security copy lives only in docs | Verified | Verified |
+| UI-17 | P1: Security copy lives only in docs | Verified | Verified |
 | UI-18 | P2: Responsive sidebar | Design | Pending |
 | UI-19 | P2: Responsive sidebar | Design | Pending |
 

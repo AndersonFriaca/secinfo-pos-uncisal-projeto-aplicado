@@ -232,10 +232,11 @@ minimum cost for that.
 
 ## Handoff
 
-**Feature**: `frontend-shadcn-layouts` — **PLANNED, awaiting approval to Execute** (2026-09-12).
-**Phase**: Execute in progress (batch 1 = T1–T8, batch 2 = T9–T13, sonnet sub-agents), then Verifier.
-**Scope**: card-less centered auth screens (`/login`, `/signup`, `/verify-email`), shadcn `Sidebar` dashboard shell, security-rule copy removed from pages (landing card + OWASP text, signup password rules, metadata description). No route/API/security-control change. Key constraint: nonce-only `style-src` → vendored `sidebar.tsx` loses its 3 inline `style=` props, width vars move to `globals.css` (design.md Research Findings).
-**Next step**: user approves tasks → Execute (13 tasks, 4 phases, 2 batches → sub-agent offer) → Verifier.
+**Feature**: `frontend-shadcn-layouts` — **COMPLETE** (2026-09-12). 13 tasks in 2 sonnet sub-agent batches (`a2421cc..2027827`), independent Verifier **PASS** first pass: 17/17 automatable ACs matched, sensor 4/4 mutants killed, `validate_state.py` exit 0. UI-18/UI-19 (responsive sidebar) are manual UAT by spec.
+**Completed**: card-less `AuthShell` + `LoginForm`/`SignupForm`/`VerifyEmailForm`; shadcn `sidebar`/`breadcrumb` blocks installed and CSP-adapted (no `style=` in SSR; width vars in `globals.css`; `style-src` unchanged and now asserted in `headers.test.ts`); `LandingContent` without the security card/OWASP text; `lib/site.ts` neutral metadata; `AppSidebar` + `DashboardShell`; `docs/application.md` updated. **197 tests / 25 files**, lint/typecheck/build clean. Vitest now runs `.test.tsx` via `react-dom/server` with an `@` alias.
+**Deviations (in tasks.md)**: one-line `eslint-disable` in CLI-generated `hooks/use-mobile.ts`; `resolve.alias` added to `vitest.config.mts`.
+**Lessons**: L-021 candidate (assert absence of client handlers for "JS disabled" edge cases).
+**Next step**: manual UAT of the responsive sidebar on the deployed VM after the next release; nothing pushed yet (local commits only).
 
 ---
 

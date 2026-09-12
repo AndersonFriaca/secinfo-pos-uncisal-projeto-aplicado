@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 21,
+  "next_id": 22,
   "lessons": [
     {
       "id": "L-001",
@@ -365,6 +365,24 @@
       ],
       "created": "2026-09-06T17:38:08Z",
       "last_seen": "2026-09-06T17:38:08Z"
+    },
+    {
+      "id": "L-021",
+      "key": "spec_precision_gap::for a no client js edge case add a test that asserts the absence of onsubmit client side handlers on the rendered form not just that the form exists plausibility by construction is not the same as an assertion",
+      "text": "For a 'no client JS' edge case, add a test that asserts the absence of onSubmit/client-side handlers on the rendered form, not just that the form exists — plausibility by construction is not the same as an assertion.",
+      "signal": "spec_precision_gap",
+      "scope": "web/components,testing",
+      "status": "candidate",
+      "features": [
+        "frontend-shadcn-layouts"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md Edge Cases: 'WHEN JavaScript is disabled THEN every form...SHALL still submit' (web/components,testing)"
+      ],
+      "created": "2026-09-12T21:55:04Z",
+      "last_seen": "2026-09-12T21:55:04Z"
     }
   ]
 }

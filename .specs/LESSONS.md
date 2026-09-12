@@ -134,6 +134,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: infra/compute.tf:54 (mutant E5) (ci,iac)
 - last seen: 2026-09-06T17:38:08Z
 
+### L-021 - For a 'no client JS' edge case, add a test that asserts the absence of onSubmit/client-side handlers on the rendered form, not just that the form exists — plausibility by construction is not the same as an assertion.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `web/components,testing` · harmful: 0
+- features: frontend-shadcn-layouts
+- evidence: spec.md Edge Cases: 'WHEN JavaScript is disabled THEN every form...SHALL still submit' (web/components,testing)
+- last seen: 2026-09-12T21:55:04Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
