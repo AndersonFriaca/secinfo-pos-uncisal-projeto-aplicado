@@ -133,7 +133,15 @@ PUBLIC_IP="$(curl -s -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip")"
 
 HTTPS_SITE="/etc/nginx/sites-available/app-ssl"
-if ! certbot certificates 2>/dev/null | grep -q "$PUBLIC_IP"; then
+# Guard against an empty $PUBLIC_IP (metadata query raced/failed): an empty
+# needle makes `grep -q "$PUBLIC_IP"` match ANY non-empty `certbot certificates`
+# output, which previously short-circuited straight to CERT_OBTAINED=true
+# without ever obtaining a real cert — baking a broken
+# "/etc/letsencrypt/live//fullchain.pem" path into the HTTPS vhost.
+if [ -z "$PUBLIC_IP" ]; then
+  CERT_OBTAINED=false
+  logger -t startup-script "PUBLIC_IP metadata query returned empty; skipping certbot, leaving nginx on HTTP-only"
+elif ! certbot certificates 2>/dev/null | grep -q "$PUBLIC_IP"; then
   if certbot certonly \
       --non-interactive \
       --agree-tos \

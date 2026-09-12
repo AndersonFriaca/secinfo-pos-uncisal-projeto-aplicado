@@ -11,6 +11,8 @@ credentials*.json
 *.tfstate
 *.tfstate.backup
 *.tfvars
+*.tfplan
+tfplan.out
 .terraform/
 backend.hcl
 !backend.hcl.example
