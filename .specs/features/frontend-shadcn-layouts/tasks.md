@@ -85,14 +85,16 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `web/components/ui/button.test.tsx` renders `<Button asChild><Link href="/login">Entrar</Link></Button>` and asserts the output contains `<a href="/login"` — if `next/link` throws here, record the fallback (injectable link component) in `design.md` before continuing
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 158 tests pass (157 + 1)
+- [x] `web/components/ui/button.test.tsx` renders `<Button asChild><Link href="/login">Entrar</Link></Button>` and asserts the output contains `<a href="/login"` — if `next/link` throws here, record the fallback (injectable link component) in `design.md` before continuing
+- [x] Gate check passes: `npm test`
+- [x] Test count: 158 tests pass (157 + 1)
 
 **Tests**: unit
 **Gate**: quick
 
 **Commit**: `test(web): render .tsx components in vitest via react-dom/server`
+
+**Status**: ✅ Complete (commit pending) — `next/link` renders as a plain `<a>` under `renderToStaticMarkup` outside a Next router context with no error; no fallback `LinkComponent` prop was needed.
 
 ---
 
