@@ -5,14 +5,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "./auth-shell";
 
-/** Generic, non-enumerating message — matches the route's 400 body (AUTH-04). */
+/** Generic, non-enumerating message — matches the route's `error=invalid` redirect (AUTH-04). */
 export const SIGNUP_GENERIC_ERROR =
   "Não foi possível criar a conta com esses dados";
+export const SIGNUP_RATE_LIMITED_ERROR =
+  "Muitas requisições, tente novamente em instantes";
+export const SIGNUP_UNAVAILABLE_ERROR = "Serviço temporariamente indisponível";
+
+/** AUTH-19: one message per `?error` code; any unrecognized code falls back to the generic one. */
+const ERROR_MESSAGE: Record<string, string> = {
+  invalid: SIGNUP_GENERIC_ERROR,
+  rate_limited: SIGNUP_RATE_LIMITED_ERROR,
+  unavailable: SIGNUP_UNAVAILABLE_ERROR,
+};
 
 /**
- * Signup screen body (APP-03, AUTH-01, UI-01, UI-03, UI-05, UI-14). A
- * card-less form posting to `/api/auth/signup` with the CSRF token from the
- * `x-csrf-token` header. The password-rules copy lives only in
+ * Signup screen body (APP-03, AUTH-01, AUTH-19, UI-01, UI-03, UI-05, UI-14,
+ * UI-16). A card-less form posting to `/api/auth/signup` with the CSRF token
+ * from the `x-csrf-token` header. The password-rules copy lives only in
  * `README.md` / `docs/security.md`, not here.
  */
 export function SignupForm({
@@ -20,8 +30,9 @@ export function SignupForm({
   error,
 }: {
   csrfToken: string;
-  error: boolean;
+  error?: string;
 }) {
+  const errorMessage = error ? (ERROR_MESSAGE[error] ?? SIGNUP_GENERIC_ERROR) : null;
   return (
     <AuthShell
       title="Criar uma conta"
@@ -35,9 +46,9 @@ export function SignupForm({
         </>
       }
     >
-      {error ? (
+      {errorMessage ? (
         <Alert variant="destructive">
-          <AlertTitle>{SIGNUP_GENERIC_ERROR}</AlertTitle>
+          <AlertTitle>{errorMessage}</AlertTitle>
         </Alert>
       ) : null}
 

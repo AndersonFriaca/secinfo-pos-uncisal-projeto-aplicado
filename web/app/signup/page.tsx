@@ -12,5 +12,10 @@ export default async function SignupPage({
   const csrfToken = (await headers()).get("x-csrf-token") ?? "";
   const { error } = await searchParams;
 
-  return <SignupForm csrfToken={csrfToken} error={Boolean(error)} />;
+  return (
+    <SignupForm
+      csrfToken={csrfToken}
+      error={typeof error === "string" ? error : undefined}
+    />
+  );
 }
