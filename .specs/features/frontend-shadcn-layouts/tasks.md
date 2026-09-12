@@ -313,15 +313,17 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `landing-content.test.tsx` covers: output contains "Projeto Aplicado", `href="/signup"`, `href="/login"`, and the `navLink.href`/`label` passed in; output contains none of "O que esta demonstração cobre", "OWASP", "Firebase", "CSRF", "CSP", "headers", "força bruta"
-- [ ] `app/page.tsx` no longer defines `FEATURES` nor imports `Card*`
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 186 tests pass (182 + 4)
+- [x] `landing-content.test.tsx` covers: output contains "Projeto Aplicado", `href="/signup"`, `href="/login"`, and the `navLink.href`/`label` passed in; output contains none of "O que esta demonstração cobre", "OWASP", "Firebase", "CSRF", "CSP", "headers", "força bruta"
+- [x] `app/page.tsx` no longer defines `FEATURES` nor imports `Card*`
+- [x] Gate check passes: `npm test`
+- [x] Test count: 186 tests pass (182 + 4)
 
 **Tests**: unit
 **Gate**: quick
 
 **Commit**: `feat(web): landing page without the security feature list`
+
+**Status**: ✅ Complete (commit pending)
 
 ---
 
