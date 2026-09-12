@@ -257,9 +257,11 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `signup-form.test.tsx` covers: `action="/api/auth/signup"`, hidden `csrf_token`, `minlength="12"`, `autocomplete="new-password"`, `error=true` → "Não foi possível criar a conta com esses dados", `error=false` → no alert, output contains none of "Pelo menos 12 caracteres" / "Uma letra minúscula e uma maiúscula" / "Um dígito" / "Um símbolo", footer link `href="/login"`
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 177 tests pass (171 + 6)
+- [x] `signup-form.test.tsx` covers: `action="/api/auth/signup"`, hidden `csrf_token`, `minlength="12"`, `autocomplete="new-password"`, `error=true` → "Não foi possível criar a conta com esses dados", `error=false` → no alert, output contains none of "Pelo menos 12 caracteres" / "Uma letra minúscula e uma maiúscula" / "Um dígito" / "Um símbolo", footer link `href="/login"`
+- [x] Gate check passes: `npm test`
+- [x] Test count: 177 tests pass (171 + 6)
+
+**Status**: ✅ Complete (commit pending)
 
 **Tests**: unit
 **Gate**: quick
