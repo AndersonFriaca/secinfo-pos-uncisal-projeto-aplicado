@@ -285,9 +285,11 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `verify-email-form.test.tsx` covers: `action="/api/auth/resend-verification"`, hidden `csrf_token`, email/password fields with `autocomplete="current-password"`, `resent=true` → `role="alert"` with "Se essa conta existir e ainda precisar de verificação, um novo e-mail está a caminho", `resent=false` → no alert, footer link `href="/login"`
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 182 tests pass (177 + 5)
+- [x] `verify-email-form.test.tsx` covers: `action="/api/auth/resend-verification"`, hidden `csrf_token`, email/password fields with `autocomplete="current-password"`, `resent=true` → `role="alert"` with "Se essa conta existir e ainda precisar de verificação, um novo e-mail está a caminho", `resent=false` → no alert, footer link `href="/login"`
+- [x] Gate check passes: `npm test` (also ran `npm run lint && npm run typecheck && npm run build` — last task of Phase 2)
+- [x] Test count: 182 tests pass (177 + 5)
+
+**Status**: ✅ Complete (commit pending)
 
 **Tests**: unit
 **Gate**: quick
