@@ -232,6 +232,15 @@ minimum cost for that.
 
 ## Handoff
 
+**Feature**: `frontend-shadcn-layouts` — **PLANNED, awaiting approval to Execute** (2026-09-12).
+**Phase**: Execute in progress (batch 1 = T1–T8, batch 2 = T9–T13, sonnet sub-agents), then Verifier.
+**Scope**: card-less centered auth screens (`/login`, `/signup`, `/verify-email`), shadcn `Sidebar` dashboard shell, security-rule copy removed from pages (landing card + OWASP text, signup password rules, metadata description). No route/API/security-control change. Key constraint: nonce-only `style-src` → vendored `sidebar.tsx` loses its 3 inline `style=` props, width vars move to `globals.css` (design.md Research Findings).
+**Next step**: user approves tasks → Execute (13 tasks, 4 phases, 2 batches → sub-agent offer) → Verifier.
+
+---
+
+### Previous feature
+
 **Feature**: `nextjs-secure-app` — **COMPLETE**. Execute done (T1-T30, 5 sequential sub-agent batches), independent Verifier **PASS** on re-verification 1/3, minor residual gaps R1/R3 cleaned up.
 **Phase**: done. `validate_state.py nextjs-secure-app` exits 0. `validation.md` verdict PASS.
 **Completed**: full `web/` Next.js 16 app (**149 unit tests** / 15 files passing; lint, typecheck, build clean); `infra/app.tf` / `infra/firebase.tf` / `infra/wif.tf` (terraform fmt + validate clean on `infra/` and `infra/bootstrap/`); `infra/scripts/startup.sh.tpl` (Node 24 LTS from NodeSource, `/opt/app` chowned, `server_tokens off`); `infra/scripts/ecosystem.config.js` (standalone `node current/server.js`); `.github/workflows/ci.yml` (PR test gate) and `.github/workflows/deploy.yml` (WIF keyless deploy). README documents four OWASP Top 10:2025 categories with verified file paths; `docs/application.md` added.
