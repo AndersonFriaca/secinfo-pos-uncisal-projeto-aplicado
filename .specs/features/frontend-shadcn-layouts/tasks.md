@@ -228,10 +228,12 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `login-form.test.tsx` covers: `method="post"` + `action="/api/auth/login"`, hidden `csrf_token` with the given value (and empty string when `csrfToken=""`), `name="email"` `type="email"` `autocomplete="email"` `required`, `name="password"` `autocomplete="current-password"` `required`, `error=true` → `role="alert"` with "E-mail ou senha inválidos", `error=false` → no `role="alert"`, footer link `href="/signup"`, no `data-slot="card"`
-- [ ] `app/login/page.tsx` imports no `Card*`
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 171 tests pass (164 + 7)
+- [x] `login-form.test.tsx` covers: `method="post"` + `action="/api/auth/login"`, hidden `csrf_token` with the given value (and empty string when `csrfToken=""`), `name="email"` `type="email"` `autocomplete="email"` `required`, `name="password"` `autocomplete="current-password"` `required`, `error=true` → `role="alert"` with "E-mail ou senha inválidos", `error=false` → no `role="alert"`, footer link `href="/signup"`, no `data-slot="card"`
+- [x] `app/login/page.tsx` imports no `Card*`
+- [x] Gate check passes: `npm test`
+- [x] Test count: 171 tests pass (164 + 7)
+
+**Status**: ✅ Complete (commit pending)
 
 **Tests**: unit
 **Gate**: quick

@@ -129,8 +129,8 @@ The pages in `web/` were built as the minimum needed to exercise the auth flow: 
 | --- | --- | --- | --- |
 | UI-01 | P1: Clean auth screens | Execute | Implementing |
 | UI-02 | P1: Clean auth screens | Execute | Implementing |
-| UI-03 | P1: Clean auth screens | Tasks | In Tasks |
-| UI-04 | P1: Clean auth screens | Tasks | In Tasks |
+| UI-03 | P1: Clean auth screens | Execute | Implementing |
+| UI-04 | P1: Clean auth screens | Execute | Implementing |
 | UI-05 | P1: Clean auth screens | Tasks | In Tasks |
 | UI-06 | P1: Sidebar dashboard | Execute | Implementing |
 | UI-07 | P1: Sidebar dashboard | Tasks | In Tasks |
