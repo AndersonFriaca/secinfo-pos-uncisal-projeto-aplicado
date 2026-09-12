@@ -1,13 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { getSessionState } from "@/lib/auth/session";
 import { dashboardRedirect } from "@/lib/dashboard-guard";
 
@@ -41,29 +34,9 @@ export default async function DashboardPage() {
   const user = state.user;
 
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center gap-6 px-6 py-16">
-      <Card>
-        <CardHeader>
-          <CardTitle>Painel</CardTitle>
-          <CardDescription>Você está autenticado.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <p className="text-sm">
-            Autenticado como{" "}
-            <span className="font-medium">{user.email ?? user.uid}</span>
-          </p>
-          <form
-            method="post"
-            action="/api/auth/logout"
-            className="flex flex-col gap-4"
-          >
-            <input type="hidden" name="csrf_token" value={csrfToken} />
-            <Button type="submit" variant="outline">
-              Sair
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <DashboardShell
+      email={user.email ?? user.uid}
+      csrfToken={csrfToken}
+    />
   );
 }

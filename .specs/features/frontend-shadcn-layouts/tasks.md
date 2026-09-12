@@ -399,15 +399,17 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `dashboard-shell.test.tsx` covers: `data-sidebar="trigger"` present, breadcrumb current page "Painel" (`aria-current="page"`), `<h1>` welcome text, the e-mail appears at least twice (footer + main), whole output has no `style=`, uid edge case (`email="uid-123"` shows "uid-123")
-- [ ] `git diff web/app/dashboard/page.tsx` touches only imports and the returned JSX (guard block unchanged); `lib/dashboard-guard.test.ts` + `session.test.ts` unchanged and green
-- [ ] Gate check passes: `npm run lint && npm run typecheck && npm test && npm run build`
-- [ ] Test count: 197 tests pass (192 + 5)
+- [x] `dashboard-shell.test.tsx` covers: `data-sidebar="trigger"` present, breadcrumb current page "Painel" (`aria-current="page"`), `<h1>` welcome text, the e-mail appears at least twice (footer + main), whole output has no `style=`, uid edge case (`email="uid-123"` shows "uid-123")
+- [x] `git diff web/app/dashboard/page.tsx` touches only imports and the returned JSX (guard block unchanged); `lib/dashboard-guard.test.ts` + `session.test.ts` unchanged and green
+- [x] Gate check passes: `npm run lint && npm run typecheck && npm test && npm run build`
+- [x] Test count: 197 tests pass (192 + 5)
 
 **Tests**: unit
 **Gate**: build
 
 **Commit**: `feat(web): sidebar dashboard shell`
+
+**Status**: ✅ Complete (commit pending)
 
 ---
 
