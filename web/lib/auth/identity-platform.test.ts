@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetApiKeyCache,
+  sendPasswordResetEmail,
   sendVerificationEmail,
   signInWithPassword,
   signUp,
@@ -209,6 +210,39 @@ describe("sendVerificationEmail (AUTH-03)", () => {
   it("maps an upstream 500 to unavailable", async () => {
     const { impl } = fakeFetch(500, {});
     const result = await sendVerificationEmail("id-token-3", { fetchImpl: impl });
+    expect(result).toEqual({ ok: false, reason: "unavailable" });
+  });
+});
+
+describe("sendPasswordResetEmail (AUTH-20)", () => {
+  it("POSTs requestType PASSWORD_RESET with the email to sendOobCode", async () => {
+    const { impl, calls } = fakeFetch(200, { email: "u@example.com" });
+    const result = await sendPasswordResetEmail("u@example.com", {
+      fetchImpl: impl,
+    });
+    expect(result).toEqual({ ok: true });
+    expect(calls[0].url).toBe(
+      `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${API_KEY}`,
+    );
+    expect(calls[0].body).toEqual({
+      requestType: "PASSWORD_RESET",
+      email: "u@example.com",
+    });
+  });
+
+  it("maps a non-200 upstream response to invalid", async () => {
+    const { impl } = fakeFetch(400, { error: { message: "EMAIL_NOT_FOUND" } });
+    const result = await sendPasswordResetEmail("nobody@example.com", {
+      fetchImpl: impl,
+    });
+    expect(result).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  it("maps an upstream 500 to unavailable", async () => {
+    const { impl } = fakeFetch(500, {});
+    const result = await sendPasswordResetEmail("u@example.com", {
+      fetchImpl: impl,
+    });
     expect(result).toEqual({ ok: false, reason: "unavailable" });
   });
 });

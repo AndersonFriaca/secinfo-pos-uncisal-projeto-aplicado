@@ -186,3 +186,30 @@ export async function sendVerificationEmail(
   }
   return { ok: true };
 }
+
+/**
+ * Ask Identity Platform to send its own password-reset email
+ * (`accounts:sendOobCode`, `requestType=PASSWORD_RESET`). Unlike
+ * {@link sendVerificationEmail}, this call is unauthenticated (by `email`, not
+ * an `idToken`) — the caller (AUTH-20) never branches on the result so an
+ * unregistered email produces the same outcome as a registered one
+ * (no enumeration, mirrors AUTH-04). The password is actually changed on
+ * Identity Platform's own default-hosted action page, not in this app.
+ */
+export async function sendPasswordResetEmail(
+  email: string,
+  opts: IdentityCallOptions = {},
+): Promise<SendEmailResult> {
+  const result = await callIdentityPlatform(
+    "sendOobCode",
+    { requestType: "PASSWORD_RESET", email },
+    opts.fetchImpl ?? fetch,
+  );
+  if ("ok" in result) {
+    return result;
+  }
+  if (result.status !== 200) {
+    return { ok: false, reason: "invalid" };
+  }
+  return { ok: true };
+}
