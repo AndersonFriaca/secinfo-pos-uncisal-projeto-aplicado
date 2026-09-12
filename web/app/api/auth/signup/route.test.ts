@@ -25,7 +25,7 @@ function deps(overrides: Partial<SignupDeps> = {}): SignupDeps {
 
 const STRONG = "Sup3rStr0ng!!";
 
-describe("POST /api/auth/signup (T13)", () => {
+describe("POST /api/auth/signup (T13, AUTH-18)", () => {
   it("valid submission → 303 to /verify-email and triggers the verification email", async () => {
     const d = deps();
     const res = await handleSignup(
@@ -40,35 +40,35 @@ describe("POST /api/auth/signup (T13)", () => {
   });
 
   it.each([
-    ["short1!Aa", "length"],
-    ["ABCDEFG1234!", "lowercase"],
-    ["abcdefg1234!", "uppercase"],
-    ["Abcdefghij!!", "digit"],
-    ["Abcdefghij12", "symbol"],
-  ])("weak password %s → 400 naming rule %s, no Identity Platform call", async (password, rule) => {
+    ["short1!Aa"],
+    ["ABCDEFG1234!"],
+    ["abcdefg1234!"],
+    ["Abcdefghij!!"],
+    ["Abcdefghij12"],
+  ])("weak password %s → redirect to /signup?error=invalid, no Identity Platform call", async (password) => {
     const d = deps();
     const res = await handleSignup(
       formRequest({ email: "user@example.com", password }),
       d,
     );
-    expect(res.status).toBe(400);
-    expect((await res.json()).rule).toBe(rule);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/signup?error=invalid");
     expect(d.signUp).not.toHaveBeenCalled();
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("malformed email → 400 without calling Identity Platform", async () => {
+  it("malformed email → redirect to /signup?error=invalid without calling Identity Platform", async () => {
     const d = deps();
     const res = await handleSignup(
       formRequest({ email: "not-an-email", password: STRONG }),
       d,
     );
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("Informe um e-mail válido");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/signup?error=invalid");
     expect(d.signUp).not.toHaveBeenCalled();
   });
 
-  it("duplicate email → same generic 400 body as any other upstream rejection (byte-identical)", async () => {
+  it("duplicate email → same error=invalid redirect as any other upstream rejection (byte-identical, AUTH-04)", async () => {
     const dupe = await handleSignup(
       formRequest({ email: "dupe@example.com", password: STRONG }),
       deps({ signUp: vi.fn(async () => ({ ok: false as const, reason: "invalid" as const })) }),
@@ -77,14 +77,13 @@ describe("POST /api/auth/signup (T13)", () => {
       formRequest({ email: "other@example.com", password: STRONG }),
       deps({ signUp: vi.fn(async () => ({ ok: false as const, reason: "invalid" as const })) }),
     );
-    expect(dupe.status).toBe(400);
+    expect(dupe.status).toBe(303);
+    expect(dupe.headers.get("location")).toBe("/signup?error=invalid");
     expect(await dupe.clone().text()).toBe(await other.clone().text());
-    expect((await dupe.json()).error).toBe(
-      "Não foi possível criar a conta com esses dados",
-    );
+    expect(dupe.headers.get("location")).toBe(other.headers.get("location"));
   });
 
-  it("rate-limited → 429 with Retry-After and no validation or upstream call", async () => {
+  it("rate-limited → redirect to /signup?error=rate_limited, no validation or upstream call", async () => {
     const d = deps({
       checkRateLimit: vi.fn(async () => ({
         allowed: false,
@@ -95,13 +94,13 @@ describe("POST /api/auth/signup (T13)", () => {
       formRequest({ email: "user@example.com", password: STRONG }),
       d,
     );
-    expect(res.status).toBe(429);
-    expect(res.headers.get("retry-after")).toBe("60");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/signup?error=rate_limited");
     expect(d.signUp).not.toHaveBeenCalled();
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("Identity Platform unavailable → 503 generic body", async () => {
+  it("Identity Platform unavailable → redirect to /signup?error=unavailable", async () => {
     const res = await handleSignup(
       formRequest({ email: "user@example.com", password: STRONG }),
       deps({
@@ -111,6 +110,7 @@ describe("POST /api/auth/signup (T13)", () => {
         })),
       }),
     );
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/signup?error=unavailable");
   });
 });

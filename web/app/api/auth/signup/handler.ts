@@ -3,33 +3,24 @@
  * the verification email.
  *
  * Order (T13): rate-limit the `auth` bucket → validate the email and password →
- * call Identity Platform. A weak password never reaches Identity Platform. An
- * already-registered email gets the same generic 400 body as any other upstream
- * signup rejection. Every response carries `Cache-Control: no-store`.
+ * call Identity Platform. A weak password never reaches Identity Platform. Every
+ * rejection (invalid email/password, an already-registered email, rate limit,
+ * or Identity Platform unavailability) redirects back to `/signup?error=<code>`
+ * instead of returning a JSON body — the browser renders the `SignupForm`
+ * again with the matching `Alert` instead of a raw JSON page (AUTH-18). An
+ * already-registered email produces the byte-identical `error=invalid`
+ * redirect as any other upstream signup rejection (AUTH-04 — no enumeration).
+ * Every response carries `Cache-Control: no-store`.
  *
- * Requirements: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05.
+ * Requirements: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-18.
  */
 
 import {
   normalizeEmail,
   validatePassword,
-  type PasswordRule,
 } from "../../../../lib/validation/credentials";
 import { signUp, sendVerificationEmail } from "../../../../lib/auth/identity-platform";
 import { checkRateLimit, resolveClientIp } from "../../../../lib/security/rate-limit";
-
-/** AUTH-04: one message for every upstream signup rejection (no enumeration). */
-const GENERIC_SIGNUP_ERROR = "Não foi possível criar a conta com esses dados";
-const INVALID_EMAIL_ERROR = "Informe um e-mail válido";
-const UNAVAILABLE_ERROR = "Serviço temporariamente indisponível";
-
-const PASSWORD_RULE_MESSAGE: Record<PasswordRule, string> = {
-  length: "A senha deve ter pelo menos 12 caracteres",
-  lowercase: "A senha deve incluir uma letra minúscula",
-  uppercase: "A senha deve incluir uma letra maiúscula",
-  digit: "A senha deve incluir um dígito",
-  symbol: "A senha deve incluir um símbolo",
-};
 
 export type SignupDeps = {
   checkRateLimit: typeof checkRateLimit;
@@ -44,21 +35,6 @@ const defaultDeps: SignupDeps = {
   sendVerificationEmail,
   resolveClientIp,
 };
-
-function json(
-  status: number,
-  body: unknown,
-  extraHeaders: Record<string, string> = {},
-): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "no-store",
-      ...extraHeaders,
-    },
-  });
-}
 
 function redirect(path: string): Response {
   return new Response(null, {
@@ -102,33 +78,26 @@ export async function handleSignup(
 
   const limit = await deps.checkRateLimit(ip, "auth");
   if (!limit.allowed) {
-    return json(
-      429,
-      { error: "Muitas requisições" },
-      { "retry-after": String(limit.retryAfterSeconds ?? 60) },
-    );
+    return redirect("/signup?error=rate_limited");
   }
 
   const { email, password } = await readCredentials(request);
 
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {
-    return json(400, { error: INVALID_EMAIL_ERROR });
+    return redirect("/signup?error=invalid");
   }
 
   const passwordCheck = validatePassword(password);
   if (!passwordCheck.ok) {
-    return json(400, {
-      error: PASSWORD_RULE_MESSAGE[passwordCheck.failed],
-      rule: passwordCheck.failed,
-    });
+    return redirect("/signup?error=invalid");
   }
 
   const created = await deps.signUp(normalizedEmail, password);
   if (!created.ok) {
     return created.reason === "unavailable"
-      ? json(503, { error: UNAVAILABLE_ERROR })
-      : json(400, { error: GENERIC_SIGNUP_ERROR });
+      ? redirect("/signup?error=unavailable")
+      : redirect("/signup?error=invalid");
   }
 
   await deps.sendVerificationEmail(created.idToken);
