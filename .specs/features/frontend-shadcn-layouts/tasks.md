@@ -170,16 +170,18 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `grep -n "style=" web/components/ui/sidebar.tsx` returns nothing
-- [ ] `sidebar.test.tsx`: (a) no `style=` in output, (b) output contains `data-slot="sidebar-wrapper"` and `data-slot="sidebar"` (proves the desktop branch rendered)
-- [ ] `headers.test.ts` asserts `style-src 'self' 'nonce-NONCE123'` in production CSP
-- [ ] Gate check passes: `npm test`
-- [ ] Test count: 161 tests pass (158 + 2 sidebar + 1 headers)
+- [x] `grep -n "style=" web/components/ui/sidebar.tsx` returns nothing
+- [x] `sidebar.test.tsx`: (a) no `style=` in output, (b) output contains `data-slot="sidebar-wrapper"` and `data-slot="sidebar"` (proves the desktop branch rendered)
+- [x] `headers.test.ts` asserts `style-src 'self' 'nonce-NONCE123'` in production CSP
+- [x] Gate check passes: `npm test`
+- [x] Test count: 161 tests pass (158 + 2 sidebar + 1 headers)
 
 **Tests**: unit
 **Gate**: quick
 
 **Commit**: `fix(web): drop inline styles from the sidebar block to satisfy style-src`
+
+**Status**: ✅ Complete (commit pending) — the `headers.test.ts` `style-src` assertion did not already exist, so it was added as planned (no count reduction). SPEC_DEVIATION: rendering `sidebar.tsx` in Vitest required adding a `resolve.alias` for `@` to `vitest.config.mts` (the `@/hooks/use-mobile` / `@/components/ui/*` imports were previously untested and Vitest has no bundler path-alias support by default); this only affects the test runner, not shipped code.
 
 ---
 

@@ -22,6 +22,10 @@ describe("buildSecurityHeaders — CSP (SEC-08, SEC-09)", () => {
     );
   });
 
+  it("sets style-src to 'self' and the nonce only (UI-10, no 'unsafe-inline')", () => {
+    expect(csp).toContain("style-src 'self' 'nonce-NONCE123'");
+  });
+
   it("sets object-src 'none'", () => {
     expect(csp).toContain("object-src 'none'");
   });

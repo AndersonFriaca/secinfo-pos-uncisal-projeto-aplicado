@@ -26,9 +26,6 @@ import { PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContextProps = {
@@ -57,7 +54,6 @@ function SidebarProvider({
   open: openProp,
   onOpenChange: setOpenProp,
   className,
-  style,
   children,
   ...props
 }: React.ComponentProps<"div"> & {
@@ -129,13 +125,9 @@ function SidebarProvider({
     <SidebarContext.Provider value={contextValue}>
       <div
         data-slot="sidebar-wrapper"
-        style={
-          {
-            "--sidebar-width": SIDEBAR_WIDTH,
-            "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-            ...style,
-          } as React.CSSProperties
-        }
+        // CSP: no inline style — --sidebar-width/--sidebar-width-icon now live
+        // in globals.css under [data-slot="sidebar-wrapper"] (nonce-only
+        // style-src cannot authorize a style attribute).
         className={cn(
           "group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar",
           className
@@ -187,11 +179,8 @@ function Sidebar({
           data-slot="sidebar"
           data-mobile="true"
           className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
-          style={
-            {
-              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-            } as React.CSSProperties
-          }
+          // CSP: no inline style — --sidebar-width for the mobile sheet now
+          // lives in globals.css under [data-slot="sidebar"][data-mobile="true"].
           side={side}
         >
           <SheetHeader className="sr-only">
@@ -587,11 +576,6 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<"div"> & {
   showIcon?: boolean
 }) {
-  // Random width between 50 to 90%.
-  const [width] = React.useState(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`
-  })
-
   return (
     <div
       data-slot="sidebar-menu-skeleton"
@@ -605,14 +589,11 @@ function SidebarMenuSkeleton({
           data-sidebar="menu-skeleton-icon"
         />
       )}
+      {/* CSP: fixed width, no inline style — the vendored block randomized
+          this per-render via a --skeleton-width CSS variable. */}
       <Skeleton
-        className="h-4 max-w-(--skeleton-width) flex-1"
+        className="h-4 w-3/5 flex-1"
         data-sidebar="menu-skeleton-text"
-        style={
-          {
-            "--skeleton-width": width,
-          } as React.CSSProperties
-        }
       />
     </div>
   )
