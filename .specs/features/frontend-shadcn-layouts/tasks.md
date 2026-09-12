@@ -428,16 +428,18 @@ T4 → T11 → T12 → T13
 
 **Done when**:
 
-- [ ] `docs/application.md` mentions the shared auth form and the sidebar dashboard
-- [ ] `git diff --stat` shows only `docs/application.md` (+ `.specs/` traceability)
-- [ ] `grep -n "OWASP Top 10" README.md` still matches
-- [ ] Gate check passes: `npm run lint && npm run typecheck && npm test && npm run build`
-- [ ] Test count: 197 tests pass
+- [x] `docs/application.md` mentions the shared auth form and the sidebar dashboard
+- [x] `git diff --stat` shows only `docs/application.md` (+ `.specs/` traceability)
+- [x] `grep -n "OWASP Top 10" README.md` still matches
+- [x] Gate check passes: `npm run lint && npm run typecheck && npm test && npm run build`
+- [x] Test count: 197 tests pass
 
 **Tests**: none
 **Gate**: build
 
 **Commit**: `docs: describe the restyled auth and dashboard screens`
+
+**Status**: ✅ Complete (commit pending)
 
 ---
 

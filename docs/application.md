@@ -8,6 +8,19 @@ a autenticação; o navegador recebe apenas um cookie de sessão httpOnly e um
 token CSRF — nenhuma API key, project ID ou config do Firebase chega ao bundle
 do cliente.
 
+## Telas
+
+As telas de `/login`, `/signup` e `/verify-email` compartilham um mesmo
+formulário centralizado, sem cartão (`AuthShell`): título, descrição, campos e
+um botão de ação, com um link de rodapé para a tela irmã. O `/dashboard`
+renderiza um shell de aplicação com barra lateral (`AppSidebar` +
+`DashboardShell`) — marca, item "Painel" ativo e rodapé com o e-mail do
+usuário e o botão "Sair" — mais um cabeçalho com o atalho da barra e uma
+trilha (breadcrumb) e uma mensagem de boas-vindas centralizada. Nenhuma tela
+descreve os controles de segurança da aplicação; essa documentação vive no
+[`README.md`](../README.md#segurança-da-aplicação-owasp-top-10) e em
+[`docs/security.md`](./security.md).
+
 ## Como roda
 
 - Construída no GitHub Actions como um bundle **standalone** do `next build`,
