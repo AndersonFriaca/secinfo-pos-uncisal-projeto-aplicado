@@ -10,137 +10,135 @@ start/stop` diretamente.**
 ./ops/vm-stop.sh    # stops the instance, detaches and releases the static IP
 ```
 
-Por que isso importa: `infra/compute.tf` deliberadamente deixa o IP externo da
-instância **efêmero** no Terraform — um IP estático *reservado* é cobrado pelo
-GCP sempre que não está anexado a uma instância **em execução**, o que entra
-em conflito direto com parar a VM entre usos para economizar custo. O Terraform
-não tem hook "ao iniciar/parar instância", então a sequência reservar →
-anexar → iniciar (e o espelho: parar → desanexar → liberar) vive nesses dois
-scripts, imperativamente, apenas pela janela em que a VM está de fato no ar.
+Motivo: `infra/compute.tf` declara o IP externo da instância como
+**efêmero**. Um IP estático *reservado* é cobrado pelo GCP sempre que não
+está anexado a uma instância **em execução**, o que conflita com parar a VM
+entre usos. O Terraform não possui hook de start/stop de instância, então a
+sequência reservar → anexar → iniciar (e a inversa: parar → desanexar →
+liberar) é executada imperativamente por esses scripts, apenas na janela em
+que a VM está ativa.
 
-Os dois scripts leem `project_id` / `region` / `zone` do
-`infra/terraform.tfvars` (no gitignore) — o project ID do GCP nunca é
-hardcoded em um arquivo versionado.
+Ambos leem `project_id` / `region` / `zone` de `infra/terraform.tfvars`
+(gitignored) — o project ID nunca é hardcoded em arquivo versionado.
 
-**Nota de drift:** enquanto a VM está rodando via `vm-start.sh`, seu
-access-config aponta para uma reserva que o Terraform desconhece. Rodar
-`terraform apply` em `infra/` com a VM no ar vai trocar de volta para efêmero
-(inofensivo, mas o IP muda). Prefira parar a VM com `vm-stop.sh` antes de
-rodar mudanças do Terraform contra `infra/`.
+**Drift:** enquanto a VM está ativa via `vm-start.sh`, o access-config aponta
+para uma reserva desconhecida pelo Terraform. Um `terraform apply` em
+`infra/` com a VM ativa restaura o IP efêmero (inofensivo, mas o IP muda).
+Prefira `vm-stop.sh` antes de aplicar mudanças em `infra/`.
 
-Por padrão, `operator_ssh_cidrs` é `["0.0.0.0/0"]`, então `terraform apply`
-mantém a regra `allow-ssh` com o `:22` público aberto para a banca avaliadora
-(somente por chave, com Fail2ban). Para endurecer, defina `operator_ssh_cidrs`
-com o seu CIDR (por exemplo `["203.0.113.4/32"]`) antes do apply; a regra
-continua existindo, apenas com a origem restrita. Independentemente da origem,
-o deploy da CI sem chave alcança a VM pela regra aditiva `allow-iap-ssh` (faixa
-IAP `35.235.240.0/20`), e o operador também pode usar `gcloud compute ssh
---tunnel-through-iap` (o principal chamador precisa de
+### Acesso SSH
+
+Por padrão `operator_ssh_cidrs = ["0.0.0.0/0"]`, e a regra `allow-ssh` mantém
+o `:22` público (somente chave, com Fail2ban). Para restringir, defina
+`operator_ssh_cidrs` com o seu CIDR (por exemplo `["203.0.113.4/32"]`) antes
+do apply; a regra continua existindo, apenas com a origem limitada.
+Independentemente da origem, o deploy da CI alcança a VM pela regra aditiva
+`allow-iap-ssh` (faixa IAP `35.235.240.0/20`), e o operador pode usar
+`gcloud compute ssh --tunnel-through-iap` (o principal chamador precisa de
 `roles/iap.tunnelResourceAccessor`).
 
-A VM também define `block-project-ssh-keys = "TRUE"`, então chaves SSH em
-nível de projeto são ignoradas — toda chave precisa estar no metadata da
-*instância* (a chave do operador que o Terraform injeta, ou a chave efêmera
-que o `gcloud compute ssh` adiciona).
+A VM define `block-project-ssh-keys = "TRUE"`: chaves SSH de nível de projeto
+são ignoradas, e toda chave precisa estar no metadata da *instância* (a chave
+do operador injetada pelo Terraform, ou a chave efêmera adicionada por
+`gcloud compute ssh`).
 
 ## Verificações de saúde
 
-Entre por SSH. Com o padrão `operator_ssh_cidrs = ["0.0.0.0/0"]`, `ssh
-<ssh_username>@<ip>` funciona direto (somente por chave). Se você restringiu
-esse CIDR, use o túnel IAP — o principal chamador precisa de
-`roles/iap.tunnelResourceAccessor` (Owner também serve, com um self-grant):
+Conecte via SSH. Com o padrão `operator_ssh_cidrs = ["0.0.0.0/0"]`,
+`ssh <ssh_username>@<ip>` funciona diretamente. Com o CIDR restrito, use o
+túnel IAP (o principal chamador precisa de `roles/iap.tunnelResourceAccessor`;
+Owner também serve, com um self-grant):
 
 ```bash
 gcloud compute ssh <ssh_username>@app-vm --zone=<zone> --project=<project_id> --tunnel-through-iap
 ```
 
-Então, na VM:
+Na VM:
 
 ```bash
 sudo systemctl is-active nginx fail2ban        # both should print "active"
 sudo fail2ban-client status sshd               # shows ban count, currently-banned IPs
-pm2 list                                       # PM2's process table (empty until an app is deployed)
+sudo -u appsvc bash -lc 'pm2 list'             # PM2's process table as the app user (empty until a release is deployed)
 sudo certbot certificates                      # current cert, expiry date
 systemctl list-timers | grep certbot           # confirms the renewal timer is scheduled
-sudo nginx -T | grep -E 'listen|proxy_pass|ssl_certificate'
-openssl list -providers                        # "oqsprovider" deve aparecer como "active"
+sudo nginx -T | grep -E 'listen|proxy_pass|ssl_certificate|ssl_ecdh_curve'
+openssl list -providers                        # "oqsprovider" must appear as "active"
 ```
 
-Para testar a renovação sem esperar ela disparar de fato:
+Teste de renovação sem aguardar o timer:
 
 ```bash
 sudo certbot renew --dry-run
 ```
 
-Para confirmar o suporte a PQC de fora (sem precisar de SSH) — veja
-[security.md](security.md#pqc-troca-de-chaves-pós-quântica-híbrida) para o
-que esse grupo significa:
+Confirmação externa do suporte a PQC (sem SSH) — veja
+[security.md](security.md#pqc-troca-de-chaves-pós-quântica-híbrida):
 
 ```bash
 openssl s_client -connect <ip>:443 -groups X25519MLKEM768:X25519 -tls1_3 </dev/null 2>&1 \
   | grep -i "negotiated tls1.3 group"
 ```
 
-## Lendo o log de boot
+## Log de boot
 
-Se algo parecer errado logo depois de um boot (HTTP não responde, HTTPS
-ausente), a própria saída do script de inicialização está na serial console —
-útil porque não exige que o SSH já esteja funcionando:
+Se algo falhar logo após um boot (HTTP não responde, HTTPS ausente), a saída
+do startup script está na serial console — acessível mesmo sem SSH
+funcional:
 
 ```bash
 gcloud compute instances get-serial-port-output app-vm --zone=<zone> --project=<project_id> \
   | grep -iE "startup-script|fail2ban|certbot|error|failed"
 ```
 
-Procure por `Script "startup-script" failed with error` — isso significa que o
-`set -e` matou o script no meio, e tudo depois do estágio que falhou nunca
-rodou. Veja [troubleshooting.md](troubleshooting.md) para os dois casos reais
-disso encontrados até agora.
+`Script "startup-script" failed with error` indica que `set -euo pipefail`
+encerrou o script no estágio anterior, e nenhum estágio posterior executou.
+Veja [troubleshooting.md](troubleshooting.md) para os casos documentados.
 
 ## Cortar uma release (tag + GitHub Release)
 
-Versionamento é semver automático via `release-please`
-(`.github/workflows/release.yml`) — **nunca edite `web/package.json` `version`
-na mão**. O fluxo:
+Versionamento semver automático via `release-please`
+(`.github/workflows/release.yml`) — **nunca edite `version` em
+`web/package.json` manualmente**. Fluxo:
 
-1. Commits normais em `main` seguindo Conventional Commits (`feat:` sobe minor,
-   `fix:` sobe patch, `feat!:` ou rodapé `BREAKING CHANGE:` sobe major). Os
-   tipos `docs`/`test`/`chore`/`style` não sobem versão.
-2. A cada push em `main`, o workflow abre (ou atualiza) um PR
-   `chore(main): release X.Y.Z` que sobe `web/package.json` e
+1. Commits em `main` seguem Conventional Commits (`feat:` incrementa minor,
+   `fix:` incrementa patch, `feat!:` ou rodapé `BREAKING CHANGE:` incrementa
+   major). `docs`/`test`/`chore`/`style` não incrementam versão.
+2. A cada push em `main`, o workflow abre ou atualiza um PR
+   `chore(main): release X.Y.Z` que atualiza `web/package.json` e
    `web/CHANGELOG.md`.
-3. Fazer merge desse PR cria a tag anotada `vX.Y.Z` e o GitHub Release com as
-   notas do changelog — e **só esse merge** dispara o deploy na VM
-   (`release.yml` chama `deploy.yml`, gated em `releases_created`). Um push
-   comum em `main` não faz deploy; `workflow_dispatch` no workflow `Deploy`
-   força um redeploy manual do `main` atual.
+3. O merge desse PR cria a tag anotada `vX.Y.Z` e o GitHub Release com as
+   notas do changelog — e **somente esse merge** dispara o deploy na VM
+   (`release.yml` chama `deploy.yml`, condicionado a `releases_created`). Um
+   push comum em `main` não faz deploy; `workflow_dispatch` no workflow
+   `Deploy` força um redeploy manual do `main` atual.
 
 `bootstrap-sha` em `release-please-config.json` fixa `3cbc1e3` como ponto de
-partida — a primeira release só conta commits depois do trabalho de CI/CD.
+partida: a primeira release considera apenas commits posteriores ao trabalho
+de CI/CD.
 
 ## Teardown
 
-Remova todo recurso cobrável com um único comando no root principal:
+Remove todo recurso cobrável com um único comando no root principal:
 
 ```bash
 cd infra
 terraform destroy
 ```
 
-Isto remove a instância de compute, seu boot disk, as quatro regras de
-firewall e a VPC/subnet custom — tudo que está declarado no state de `infra/`.
-Nenhum recurso ali define `lifecycle { prevent_destroy = true }`, então isto
-sempre completa por inteiro; nada consegue abortar o plano no meio.
+Remove a instância de compute e seu boot disk, as quatro regras de firewall,
+a VPC/subnet custom e os demais recursos declarados no state de `infra/`
+(Identity Platform, WIF, Secret Manager, bucket `vm-assets`). Nenhum recurso
+define `lifecycle { prevent_destroy = true }`, então o destroy sempre completa
+por inteiro.
 
-**O state bucket e o billing budget nunca são tocados.** Eles vivem
+**O state bucket e o billing budget não são afetados.** Eles vivem
 exclusivamente em `infra/bootstrap/`, um root separado fora do state de
-`infra/` — não meramente protegidos, mas estruturalmente inalcançáveis por
-esse comando. O billing budget é gratuito, então foi projetado para continuar
-alertando nos mesmos limiares mesmo com zero recursos cobráveis restantes no
-projeto, pegando qualquer coisa criada depois manualmente ou por um
-`terraform apply` futuro.
+`infra/` — estruturalmente inalcançáveis por esse comando. O billing budget é
+gratuito e continua alertando nos mesmos limiares mesmo com zero recursos
+cobráveis no projeto, cobrindo qualquer coisa criada depois manualmente ou
+por um `terraform apply` futuro.
 
-Para também remover o bucket e/ou o budget, isso é um segundo comando,
+Para remover também o bucket e o budget, execute um segundo comando,
 deliberado e separado:
 
 ```bash
@@ -148,4 +146,4 @@ cd infra/bootstrap
 terraform destroy
 ```
 
-Isto não apaga o projeto GCP em si — apenas esses dois recursos.
+Isso não apaga o projeto GCP — apenas esses dois recursos.
