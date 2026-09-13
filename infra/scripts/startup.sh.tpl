@@ -308,15 +308,27 @@ setup_pqc_provider() {
   modules_dir="$(openssl version -m | sed -E 's/^MODULESDIR: "(.*)"$/\1/')"
   [ -f "$modules_dir/oqsprovider.so" ] && return 0
 
+  # Installed for the operator's convenience (gsutil/gcloud available over
+  # SSH) — best-effort only, never gates the PQC download below. `gcloud`
+  # on Ubuntu installs as a snap (`snap.google-cloud-cli.gcloud...scope`
+  # in journalctl), and strictly-confined snaps have a well-known DNS
+  # resolution flakiness independent of the host's own working DNS
+  # (observed live: apt-get resolves fine every boot, `gcloud storage cp`
+  # intermittently can't resolve storage.googleapis.com at all, for
+  # minutes at a time). That's why the actual download just below uses a
+  # plain authenticated curl instead of `gcloud storage cp` — it must not
+  # depend on a sandboxing quirk outside this script's control.
   if ! command -v gcloud >/dev/null 2>&1; then
-    command -v gpg >/dev/null 2>&1 || apt-get install -y gnupg || return 1
-    install -d -m 0755 /usr/share/keyrings || return 1
-    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-      | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg || return 1
-    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
-      > /etc/apt/sources.list.d/google-cloud-sdk.list || return 1
-    apt-get update || return 1
-    apt-get install -y google-cloud-cli || return 1
+    (
+      command -v gpg >/dev/null 2>&1 || apt-get install -y gnupg
+      install -d -m 0755 /usr/share/keyrings
+      curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+        | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+      echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+        > /etc/apt/sources.list.d/google-cloud-sdk.list
+      apt-get update
+      apt-get install -y google-cloud-cli
+    ) || logger -t startup-script "google-cloud-cli install failed (non-fatal, operator convenience only)"
   fi
 
   local asset="oqsprovider-ubuntu24.04-amd64.tar.gz"
@@ -324,12 +336,22 @@ setup_pqc_provider() {
   local tmp_dir
   tmp_dir="$(mktemp -d)" || return 1
 
-  # DNS/network isn't always up yet this early in boot (the same class of
-  # flakiness Stage 1's apt-get update hits) — retry a few times with a
+  # Authenticate with an OAuth token minted from the instance metadata
+  # server rather than any credential file — the bucket's objectViewer
+  # grant (infra/artifacts.tf) is scoped to this VM's own service
+  # account. DNS/network isn't always up yet this early in boot (the same
+  # class of flakiness Stage 1's apt-get update hits), so retry with a
   # short backoff instead of giving up on the first transient failure.
-  local attempt
+  local token attempt
   for attempt in 1 2 3 4 5; do
-    gcloud storage cp "gs://${oqs_artifacts_bucket}/$asset" "$tmp_dir/$asset" && break
+    token="$(curl -fsS -H 'Metadata-Flavor: Google' \
+      'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' \
+      | sed -E 's/.*"access_token" *: *"([^"]+)".*/\1/')" \
+      && [ -n "$token" ] \
+      && curl -fsSL -H "Authorization: Bearer $token" \
+        -o "$tmp_dir/$asset" \
+        "https://storage.googleapis.com/${oqs_artifacts_bucket}/$asset" \
+      && break
     [ "$attempt" -eq 5 ] && { rm -rf "$tmp_dir"; return 1; }
     sleep 10
   done
