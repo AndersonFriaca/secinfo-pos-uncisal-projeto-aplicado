@@ -182,6 +182,24 @@ PUBLIC_IP="$(curl -s -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip")"
 
 HTTPS_SITE="/etc/nginx/sites-available/app-ssl"
+
+# TLS policy embedded in every HTTPS server block written below (stages 7 and
+# 10). It MUST live at server level: Ubuntu's stock /etc/nginx/nginx.conf
+# already sets `ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;` at http level,
+# so a conf.d snippet would be a duplicate-directive error, and leaving the
+# stock value in place caps the Qualys SSL Labs grade at B (TLS 1.0/1.1
+# enabled). The grade-A requirement (prd.md, Eixo 1) needs TLS 1.2+ only and
+# no CBC/RSA-key-exchange suites; TLS 1.3 suites are fixed by OpenSSL and
+# X25519MLKEM768 comes from the conf.d group line written in stage 8b.
+TLS_POLICY_MARKER="# managed-by-terraform: tls-policy v1"
+TLS_POLICY="    $TLS_POLICY_MARKER
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;"
+
 # Guard against an empty $PUBLIC_IP (metadata query raced/failed): an empty
 # needle makes `grep -q "$PUBLIC_IP"` match ANY non-empty `certbot certificates`
 # output, which previously short-circuited straight to CERT_OBTAINED=true
@@ -224,6 +242,8 @@ server {
 
     ssl_certificate     /etc/letsencrypt/live/$PUBLIC_IP/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$PUBLIC_IP/privkey.pem;
+
+$TLS_POLICY
 
     location / {
         # managed-by-terraform: proxy-placeholder (replaced in a later
@@ -478,12 +498,15 @@ chown appsvc:appsvc /opt/app/ecosystem.config.js
 
 # Write the reverse-proxy vhost when the file is still the stage-7 placeholder,
 # OR when it is a proxy vhost that predates the X-Forwarded-Proto headers below
-# (without which proxy.ts 403s every state-changing /api/* request). The cert
-# path is already kept fresh by stage 7, so $PUBLIC_IP is current here.
+# (without which proxy.ts 403s every state-changing /api/* request), OR when it
+# predates the current TLS policy marker (older VMs inherited Ubuntu's TLS 1.0/
+# 1.1-enabled default). The cert path is already kept fresh by stage 7, so
+# $PUBLIC_IP is current here.
 if [ -f "$HTTPS_SITE" ] && \
    { grep -qF "# managed-by-terraform: proxy-placeholder" "$HTTPS_SITE" || \
      { grep -qF "# managed-by-terraform: nextjs-reverse-proxy" "$HTTPS_SITE" && \
-       ! grep -qF "X-Forwarded-Proto" "$HTTPS_SITE"; }; }; then
+       { ! grep -qF "X-Forwarded-Proto" "$HTTPS_SITE" || \
+         ! grep -qF "$TLS_POLICY_MARKER" "$HTTPS_SITE"; }; }; }; then
   cat > "$HTTPS_SITE" <<EOF
 # managed-by-terraform: https site
 server {
@@ -493,6 +516,8 @@ server {
 
     ssl_certificate     /etc/letsencrypt/live/$PUBLIC_IP/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$PUBLIC_IP/privkey.pem;
+
+$TLS_POLICY
 
     location / {
         # managed-by-terraform: nextjs-reverse-proxy

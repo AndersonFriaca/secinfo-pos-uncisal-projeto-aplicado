@@ -109,8 +109,10 @@ Versionamento semver automático via `release-please`
 3. O merge desse PR cria a tag anotada `vX.Y.Z` e o GitHub Release com as
    notas do changelog — e **somente esse merge** dispara o deploy na VM
    (`release.yml` chama `deploy.yml`, condicionado a `releases_created`). Um
-   push comum em `main` não faz deploy; `workflow_dispatch` no workflow
-   `Deploy` força um redeploy manual do `main` atual.
+   push comum em `main` dispara o pipeline mas não altera a produção;
+   `workflow_dispatch` no workflow `Deploy` força um redeploy manual do
+   `main` atual. A justificativa do gate está no
+   [`README.md`](../README.md#pipeline-de-cicd).
 
 `bootstrap-sha` em `release-please-config.json` fixa `3cbc1e3` como ponto de
 partida: a primeira release considera apenas commits posteriores ao trabalho

@@ -66,6 +66,14 @@ responde com corpo JSON ao usuário:
 | `.github/workflows/deploy.yml` | `workflow_call` do `release.yml` (+ `workflow_dispatch`) | testes, build standalone, autenticação GCP sem chave (Workload Identity Federation), resolve/inicia a VM, envia o bundle e executa comandos remotos por túnel IAP (`gcloud compute scp/ssh --tunnel-through-iap`), escreve `/opt/app/.env.production`, reinicia o PM2 (`pm2 delete` + `pm2 start`) como `appsvc`, faz poll de `https://<ip>/` até HTTP 200 |
 | `.github/workflows/build-oqsprovider.yml` | `workflow_dispatch` | Compila `liboqs` + `oqs-provider` num runner `ubuntu-24.04`; o artefato é enviado manualmente ao bucket `vm-assets` — veja [security.md](security.md#pqc-troca-de-chaves-pós-quântica-híbrida) |
 
+**Gatilho.** O requisito do `prd.md` é deploy a partir de `git push origin
+main`. O push dispara `release.yml` imediatamente; a entrega na VM ocorre no
+merge do PR de release que ele mantém, para que todo deploy corresponda a uma
+tag semver e a um GitHub Release. Um push comum em `main` não altera a
+produção. `workflow_dispatch` no workflow `Deploy` força um redeploy do
+`main` atual sem cortar release. Veja o diagrama em
+[`README.md`](../README.md#pipeline-de-cicd).
+
 O workflow de deploy não guarda chave GCP de longa duração nem chave SSH:
 autentica pelo pool de Workload Identity provisionado em `infra/wif.tf` e
 alcança a VM por túnel IAP, onde o `gcloud` gera uma chave SSH efêmera a

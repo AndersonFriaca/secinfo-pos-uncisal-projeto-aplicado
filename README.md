@@ -58,6 +58,39 @@ Procedimento completo, referência de variáveis e verificação:
 teardown e o motivo de o ciclo start/stop passar por esses scripts em vez de
 `gcloud compute instances start/stop`.
 
+## Pipeline de CI/CD
+
+O `prd.md` exige que o código chegue à produção a partir de `git push origin
+main`. O pipeline atende esse fluxo em duas etapas encadeadas, ambas em
+GitHub Actions:
+
+```
+git push origin main
+   │
+   ▼
+release.yml (on: push → main)
+   ├─ release-please abre/atualiza o PR "chore(main): release X.Y.Z"
+   │    (bump semver por Conventional Commits + web/CHANGELOG.md)
+   └─ no merge desse PR: tag vX.Y.Z + GitHub Release
+          │  releases_created == 'true'
+          ▼
+       deploy.yml (workflow_call)
+          ├─ npm ci, testes, next build (standalone)
+          ├─ auth GCP keyless (Workload Identity Federation)
+          ├─ resolve o IP da VM (inicia se TERMINATED), scp/ssh por túnel IAP
+          ├─ /opt/app/releases/<sha> → current, pm2 delete + start (appsvc)
+          └─ poll https://<ip>/ até HTTP 200
+```
+
+O push em `main` dispara o pipeline imediatamente; a entrega na VM ocorre no
+merge do PR de release. Esse gate é deliberado: cada deploy corresponde a uma
+tag semver e a um GitHub Release auditável (OWASP *Software and Data
+Integrity Failures*), e nenhum commit chega à produção sem passar por testes
+e build no runner. Para um redeploy imediato do `main` atual sem cortar
+release, use `workflow_dispatch` no workflow `Deploy`. Detalhes em
+[`docs/application.md`](docs/application.md#cicd) e
+[`docs/operations.md`](docs/operations.md#cortar-uma-release-tag--github-release).
+
 ## Layout do repositório
 
 ```

@@ -97,7 +97,9 @@ onde nada mudou:
 5. Site Nginx base somente HTTP (serve o desafio ACME HTTP-01)
 5b. `server_tokens off` (oculta a versão do Nginx no header `Server`)
 6. Obtenção de um certificado de endereço IP da Let's Encrypt
-7. Server block HTTPS + redirect HTTP→HTTPS (apenas com certificado válido)
+7. Server block HTTPS (política TLS 1.2+/AEAD — veja
+   [security.md](security.md#política-tls-qualys-ssl-labs-nota-a)) + redirect
+   HTTP→HTTPS (apenas com certificado válido)
 8. Confirma/habilita o timer de renovação do Certbot
 8b. Ativa PQC (`X25519MLKEM768`) no TLS do Nginx via `oqs-provider` — veja
     [security.md](security.md#pqc-troca-de-chaves-pós-quântica-híbrida)
@@ -105,6 +107,8 @@ onde nada mudou:
    (`pm2-appsvc`)
 10. Diretório `/opt/app` + `ecosystem.config.js` (reescrito em todo boot) +
     reverse proxy do Nginx para `localhost:3000` com headers `X-Forwarded-*`
+    e a mesma política TLS do estágio 7 (o guard reescreve vhosts antigos
+    sem `X-Forwarded-Proto` ou sem o marker da política)
 
 [troubleshooting.md](troubleshooting.md) documenta as falhas encontradas
 apenas ao executar este script contra uma VM real.

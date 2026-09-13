@@ -63,6 +63,33 @@ HTTP sempre redireciona para HTTPS (estágio 7). Se a emissão falhar (rate
 limit, falha de rede transitória), o startup script registra o erro e mantém
 o Nginx servindo HTTP em vez de abortar.
 
+### Política TLS (Qualys SSL Labs nota A)
+
+Todo server block HTTPS escrito pelo startup script (estágios 7 e 10)
+incorpora a mesma política, marcada por `# managed-by-terraform: tls-policy
+v1`:
+
+- `ssl_protocols TLSv1.2 TLSv1.3;` — o `nginx.conf` padrão do Ubuntu 24.04
+  habilita TLS 1.0 e 1.1 em nível `http`, o que limita a nota do SSL Labs a
+  **B**. A diretiva precisa ficar em nível `server` (sobrescreve o `http`);
+  um snippet em `conf.d/` seria um erro de diretiva duplicada.
+- `ssl_ciphers` restrito a suítes AEAD com ECDHE (AES-GCM e
+  ChaCha20-Poly1305) para TLS 1.2 — sem CBC, sem troca de chaves RSA. As
+  suítes de TLS 1.3 são fixas pelo OpenSSL.
+- `ssl_prefer_server_ciphers off;` (todas as suítes ofertadas são fortes;
+  deixa o cliente escolher a mais eficiente para seu hardware),
+  `ssl_session_tickets off;` (sem chave de ticket de longa duração no
+  processo), cache de sessão compartilhado de 10 MB.
+- HSTS (`max-age=63072000; includeSubDomains`) é emitido pela aplicação
+  (`web/lib/security/headers.ts`); o grupo `X25519MLKEM768` vem do
+  `conf.d/pqc-groups.conf` do estágio 8b.
+
+O guard do estágio 10 reescreve um vhost existente que não contenha o marker
+da política, então um reboot atualiza VMs provisionadas antes dela. Após
+alterar a política, rode o teste em
+<https://www.ssllabs.com/ssltest/> com a VM ativa; o resultado esperado é
+**A** com "This server supports PQC (Post-Quantum Cryptography) key exchange".
+
 ## PQC: troca de chaves pós-quântica híbrida
 
 O Nginx oferece o grupo híbrido **`X25519MLKEM768`** (ML-KEM-768, FIPS 203,
