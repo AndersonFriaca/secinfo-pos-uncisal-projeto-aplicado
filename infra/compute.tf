@@ -68,8 +68,8 @@ resource "google_compute_instance" "vm" {
     # path. The operator's instance-level ssh-keys above are unaffected.
     block-project-ssh-keys = "TRUE"
     startup-script = templatefile("${path.module}/scripts/startup.sh.tpl", {
-      ecosystem_config  = file("${path.module}/scripts/ecosystem.config.js")
-      github_repository = var.github_repository
+      ecosystem_config     = file("${path.module}/scripts/ecosystem.config.js")
+      oqs_artifacts_bucket = google_storage_bucket.vm_assets.name
     })
   }
 

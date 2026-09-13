@@ -279,14 +279,17 @@ fi
 # boot time (observed: still <2% done after several minutes; trimming
 # liboqs's build to save time broke oqs-provider's compile instead, since
 # its generated algorithm tables unconditionally reference every liboqs
-# SIG symbol regardless of what's actually enabled). Building once on a
-# matching-glibc GitHub Actions ubuntu-24.04 runner
-# (.github/workflows/build-oqsprovider.yml) and downloading the compiled
-# .so here instead turns this into a few-second curl, not a multi-hour
-# compile — and needs no compiler on the VM at all.
+# SIG symbol regardless of what's actually enabled). Instead the binary
+# is built once, offline, on a matching-glibc (Ubuntu 24.04) environment
+# and uploaded to the private GCS bucket in infra/artifacts.tf
+# (google_storage_bucket.vm_assets) — the VM authenticates the download
+# via `gcloud storage cp`, which picks up its own attached service
+# account automatically (objectViewer scoped to just this bucket). No
+# CI dependency and no new credential/secret to manage: the VM already
+# carries this identity via the `cloud-platform` scope in compute.tf.
 #
 # Isolated in a function called from `if`, so a download failure (network
-# hiccup, release not yet published) can never abort the rest of this
+# hiccup, object not yet uploaded) can never abort the rest of this
 # script via `set -e` — the app must still deploy either way. Every step
 # is chained with explicit `|| return 1` rather than relying on `set -e`
 # alone: this function is invoked as an `if` condition, and bash
@@ -300,13 +303,22 @@ setup_pqc_provider() {
   modules_dir="$(openssl version -m | sed -E 's/^MODULESDIR: "(.*)"$/\1/')"
   [ -f "$modules_dir/oqsprovider.so" ] && return 0
 
-  local release_tag="oqsprovider-0.16.0-0.11.0"
+  if ! command -v gcloud >/dev/null 2>&1; then
+    command -v gpg >/dev/null 2>&1 || apt-get install -y gnupg || return 1
+    install -d -m 0755 /usr/share/keyrings || return 1
+    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+      | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg || return 1
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+      > /etc/apt/sources.list.d/google-cloud-sdk.list || return 1
+    apt-get update || return 1
+    apt-get install -y google-cloud-cli || return 1
+  fi
+
   local asset="oqsprovider-ubuntu24.04-amd64.tar.gz"
-  local url="https://github.com/${github_repository}/releases/download/$release_tag/$asset"
 
   local tmp_dir
   tmp_dir="$(mktemp -d)" || return 1
-  curl -fsSL -o "$tmp_dir/$asset" "$url" || { rm -rf "$tmp_dir"; return 1; }
+  gcloud storage cp "gs://${oqs_artifacts_bucket}/$asset" "$tmp_dir/$asset" || { rm -rf "$tmp_dir"; return 1; }
   tar -C "$tmp_dir" -xzf "$tmp_dir/$asset" || { rm -rf "$tmp_dir"; return 1; }
 
   [ -f "$tmp_dir/oqsprovider.so" ] || { rm -rf "$tmp_dir"; return 1; }

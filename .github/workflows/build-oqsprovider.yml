@@ -19,9 +19,14 @@ on:
   workflow_dispatch:
     inputs:
       liboqs_ref:
-        description: "liboqs git tag/ref to build"
+        # oqs-provider's RELEASE.md states each release's exact compatible
+        # liboqs tag — they are NOT interchangeable across minor versions
+        # (mismatched pairs fail to compile: oqs-provider references
+        # liboqs symbols, e.g. OQS_SIG_alg_sphincs_*, that get renamed or
+        # dropped between liboqs releases). 0.11.0 is pinned to 0.15.0.
+        description: "liboqs git tag/ref to build (must match oqs_provider_ref's documented compatible liboqs version in its RELEASE.md)"
         required: true
-        default: "0.16.0"
+        default: "0.15.0"
       oqs_provider_ref:
         description: "oqs-provider git tag/ref to build"
         required: true
