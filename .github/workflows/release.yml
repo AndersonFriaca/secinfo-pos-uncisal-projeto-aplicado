@@ -1,0 +1,56 @@
+name: Release
+
+# Semver tags + GitHub Releases, driven by Conventional Commits (the same
+# feat/fix/... convention the repo already enforces on commit messages).
+#
+# release-please maintains one open "release PR" that bumps web/package.json
+# and web/CHANGELOG.md from the commits landed on main since the last release.
+# Merging that PR is what creates the tag (vX.Y.Z) and the GitHub Release:
+#   feat: ...            -> minor bump
+#   fix: ...             -> patch bump
+#   feat!: / BREAKING CHANGE: footer -> major bump
+#
+# A deploy to the VM happens ONLY when that PR merge produces a release —
+# the deploy job below calls .github/workflows/deploy.yml, gated on
+# releases_created. Plain pushes to main do not deploy.
+#
+# NOTE: this action runs in manifest mode (config-file + manifest-file), so it
+# emits `releases_created` / `paths_released` and per-path `web--tag_name` —
+# NOT the bare `release_created` / `tag_name` of simple mode.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release PR / tag
+    runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.rp.outputs.releases_created }}
+      tag_name: ${{ steps.rp.outputs['web--tag_name'] }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: rp
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  deploy:
+    name: deploy released version to the VM
+    needs: release-please
+    if: needs.release-please.outputs.releases_created == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

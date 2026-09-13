@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  test:
+    name: lint, typecheck, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  iac-guardrails:
+    name: infra IAM & firewall guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Credential-free static checks. These protect the deploy identity's
+      # least-privilege scope (Amendment 2 R2: instance-scoped IAM, no predefined
+      # project role, keyless deploy stays instance-scoped) from silently
+      # regressing — terraform fmt/validate cannot see IAM scope.
+      # Public :22 is intentionally open (PRD Eixo 1: key-only + Fail2Ban), so
+      # firewall breadth is not guarded here.
+      - name: Deploy SA holds no predefined project role
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          bad=$(git grep -nE 'google_project_iam_(member|binding|policy)' -- infra/ \
+                | grep -v 'resource "google_project_iam_member" "deploy_vm_operator"' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Unexpected project-level IAM binding in infra/ (only the deployVmOperator custom-role google_project_iam_member is allowed):"
+            echo "$bad"
+            exit 1
+          fi
+          # The one allowed binding must reference the custom role by resource
+          # id, never a predefined "roles/..." literal (name-based allowlisting
+          # alone would let roles/editor through under the same resource name).
+          if grep -A4 'resource "google_project_iam_member" "deploy_vm_operator"' infra/wif.tf \
+               | grep -qE 'role\s*=\s*"roles/'; then
+            echo "::error::deploy_vm_operator binding must use google_project_iam_custom_role.deploy_vm_operator.id, not a predefined roles/ literal."
+            exit 1
+          fi
+
+      - name: Custom project role stays read-only
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          # Extract the permissions = [ ... ] list of the custom role and allow
+          # ONLY read verbs (.get / .list) on any service — an allowlist, so a
+          # new mutating verb we didn't think to denylist still fails.
+          perms=$(awk '/resource "google_project_iam_custom_role" "deploy_vm_operator"/,/^}/' infra/wif.tf \
+                  | grep -oE '"[a-z]+\.[a-zA-Z.]+"' | tr -d '"')
+          if [ -z "$perms" ]; then
+            echo "::error::could not parse deployVmOperator permissions"; exit 1
+          fi
+          bad=$(echo "$perms" | grep -vE '\.(get|list)$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::deployVmOperator custom role must hold only .get/.list permissions; found:"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: Keyless deploy keeps ssh key off project metadata
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          # G6: without this, gcloud compute ssh writes its ephemeral key to
+          # project-wide metadata, needing a project-level write the deploy SA
+          # deliberately does not hold.
+          if ! grep -qE 'block-project-ssh-keys\s*=\s*"TRUE"' infra/compute.tf; then
+            echo "::error::infra/compute.tf must set metadata block-project-ssh-keys = \"TRUE\" so the keyless deploy stays instance-scoped."
+            exit 1
+          fi
+

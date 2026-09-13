@@ -1,0 +1,4 @@
+# Copy to infra/backend.hcl (gitignored) and fill in the real bucket name
+# from infra/bootstrap's `state_bucket_name` output. Never commit the real
+# file — the bucket name embeds the GCP project ID.
+bucket = "<state_bucket_name from infra/bootstrap output>"

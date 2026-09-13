@@ -1,0 +1,197 @@
+name: Deploy
+
+# Not triggered on every push to main. Runs only when the Release workflow
+# (release-please) actually cuts a vX.Y.Z release, which calls this workflow.
+# workflow_dispatch is kept for a manual redeploy of the current main.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: build, authenticate, ship
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Unit tests
+        working-directory: web
+        run: npm test
+
+      - name: Build standalone bundle
+        working-directory: web
+        run: npm run build
+
+      - name: Assemble release archive
+        working-directory: web
+        run: |
+          set -euo pipefail
+          # The app lives in the `web/` workspace, so `next build` nests the
+          # standalone output one level down: .next/standalone/web/server.js
+          # (with its own node_modules + .next). That nested dir is the bundle
+          # root — server.js must sit at the archive root so PM2's
+          # `current/server.js` resolves. next build does NOT copy .next/static
+          # or public/ into standalone; add them at the path server.js expects.
+          APP=".next/standalone/web"
+          test -f "$APP/server.js" || { echo "no server.js at $APP" >&2; exit 1; }
+          rm -rf bundle && mkdir -p "bundle/.next/static"
+          cp -r "$APP/." bundle/
+          cp -r .next/static/. bundle/.next/static/
+          [ -d public ] && cp -r public bundle/public || true
+          test -f bundle/server.js
+          tar -czf "$GITHUB_WORKSPACE/release.tgz" -C bundle .
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA_EMAIL }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve the VM external IP (start it if TERMINATED)
+        id: vm
+        env:
+          ZONE: ${{ secrets.GCP_ZONE }}
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          INSTANCE=app-vm
+          # The VM uses an ephemeral external IP by design (AD-003): a reserved
+          # static IP is billed whenever it is not attached to a *running*
+          # instance. CI only needs *some* reachable IP to health-check, and it
+          # resolves that dynamically below — so there is no reserve/attach
+          # dance here. The operator's stable-IP-for-a-session need is served by
+          # ops/vm-start.sh, which keeps the reservation.
+          STATUS="$(gcloud compute instances describe "$INSTANCE" \
+            --zone="$ZONE" --project="$PROJECT" --format='value(status)')"
+          if [ "$STATUS" = "TERMINATED" ]; then
+            gcloud compute instances start "$INSTANCE" \
+              --zone="$ZONE" --project="$PROJECT"
+            for i in $(seq 1 18); do
+              STATUS="$(gcloud compute instances describe "$INSTANCE" \
+                --zone="$ZONE" --project="$PROJECT" --format='value(status)')"
+              [ "$STATUS" = "RUNNING" ] && break
+              echo "waiting for $INSTANCE to reach RUNNING (attempt $i, status=$STATUS)..."
+              sleep 5
+            done
+            [ "$STATUS" = "RUNNING" ] || { echo "$INSTANCE did not reach RUNNING" >&2; exit 1; }
+          fi
+          IP="$(gcloud compute instances describe "$INSTANCE" \
+            --zone="$ZONE" --project="$PROJECT" \
+            --format='value(networkInterfaces[0].accessConfigs[0].natIP)')"
+          echo "ip=$IP" >> "$GITHUB_OUTPUT"
+
+      - name: Ship the bundle over an IAP tunnel and flip the current symlink
+        env:
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          ZONE: ${{ secrets.GCP_ZONE }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # `gcloud compute ssh/scp --tunnel-through-iap` mints an ephemeral,
+          # IAM-scoped SSH key from the WIF-federated deploy SA and publishes it
+          # into instance metadata — nothing is stored in the repo or in a
+          # secret. The guest agent lands the ephemeral login user in
+          # google-sudoers, so file ops under /opt/app use sudo.
+          GCLOUD="gcloud compute --quiet --project=$PROJECT"
+          SSH="$GCLOUD ssh app-vm --zone=$ZONE --tunnel-through-iap --command"
+          # sshd + key propagation can lag ~30-60s on a just-started VM.
+          for i in $(seq 1 12); do
+            $SSH "true" && break
+            echo "waiting for sshd over IAP (attempt $i)..."
+            sleep 5
+          done
+          $GCLOUD scp --zone="$ZONE" --tunnel-through-iap \
+            "$GITHUB_WORKSPACE/release.tgz" "app-vm:/tmp/release-$SHA.tgz"
+          # Push the PM2 process definition from the repo on every deploy — it is
+          # the source of truth for how the app is launched. The startup script
+          # seeds /opt/app/ecosystem.config.js at boot, but an older VM can still
+          # carry a stale copy (e.g. one that ran `npm start`), so overwrite it.
+          $GCLOUD scp --zone="$ZONE" --tunnel-through-iap \
+            "$GITHUB_WORKSPACE/infra/scripts/ecosystem.config.js" "app-vm:/tmp/ecosystem-$SHA.js"
+          $SSH "set -euo pipefail
+            sudo install -d -o appsvc -g appsvc /opt/app/releases/$SHA
+            sudo tar -xzf /tmp/release-$SHA.tgz -C /opt/app/releases/$SHA
+            sudo chown -R appsvc:appsvc /opt/app/releases/$SHA
+            rm -f /tmp/release-$SHA.tgz
+            sudo install -m 644 -o appsvc -g appsvc /tmp/ecosystem-$SHA.js /opt/app/ecosystem.config.js
+            rm -f /tmp/ecosystem-$SHA.js
+            sudo ln -sfn /opt/app/releases/$SHA /opt/app/current"
+
+      - name: Write /opt/app/.env.production
+        env:
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          ZONE: ${{ secrets.GCP_ZONE }}
+          SHA: ${{ github.sha }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          # No auth secret in here anymore: the Identity Platform API key lives in
+          # Secret Manager (infra/secrets.tf) and the app reads it at runtime with
+          # the VM service account. GOOGLE_CLOUD_PROJECT tells it which project's
+          # secret to read (and is also firebase-admin's ADC project).
+          umask 077
+          ENV_FILE="$(mktemp)"
+          {
+            echo "NODE_ENV=production"
+            echo "PORT=3000"
+            echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT"
+          } > "$ENV_FILE"
+          GCLOUD="gcloud compute --quiet --project=$PROJECT"
+          $GCLOUD scp --zone="$ZONE" --tunnel-through-iap "$ENV_FILE" "app-vm:/tmp/env-$SHA"
+          shred -u "$ENV_FILE"
+          $GCLOUD ssh app-vm --zone="$ZONE" --tunnel-through-iap --command "set -euo pipefail
+            sudo install -m 600 -o appsvc -g appsvc /tmp/env-$SHA /opt/app/.env.production
+            sudo shred -u /tmp/env-$SHA"
+
+      - name: Reload PM2 as appsvc
+        env:
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          ZONE: ${{ secrets.GCP_ZONE }}
+        run: |
+          set -euo pipefail
+          # `pm2 reload` keeps a running app's cached script/interpreter args, so
+          # a changed ecosystem.config.js (or a stale saved process) would be
+          # ignored. Delete + start forces PM2 to re-read the file, then save so
+          # the pm2-appsvc unit resurrects the right definition on reboot.
+          gcloud compute --quiet --project="$PROJECT" ssh app-vm \
+            --zone="$ZONE" --tunnel-through-iap --command \
+            "sudo -u appsvc bash -lc 'cd /opt/app && pm2 delete ecosystem.config.js 2>/dev/null || true; pm2 start ecosystem.config.js && pm2 save'"
+
+      - name: Health poll (fail after 2 minutes without HTTP 200)
+        env:
+          IP: ${{ steps.vm.outputs.ip }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 120))
+          until [ "$(curl -sk -o /dev/null -w '%{http_code}' "https://$IP/")" = "200" ]; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "no HTTP 200 from https://$IP/ within 2 minutes" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "deployment healthy at https://$IP/"
