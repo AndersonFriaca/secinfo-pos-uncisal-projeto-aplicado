@@ -1,0 +1,80 @@
+name: Build oqs-provider (PQC OpenSSL provider)
+
+# One-off/occasional build: compiles liboqs + oqs-provider on an
+# ubuntu-24.04 runner — the same OS/glibc as infra/compute.tf's
+# app-vm image — and publishes the resulting oqsprovider.so (plus the
+# liboqs shared libs it links against) as a GitHub Release asset.
+#
+# app-vm's startup.sh.tpl downloads that asset at boot instead of
+# compiling on the VM itself: liboqs is ~2700 translation units, which
+# does not finish in any reasonable time on an e2-micro's shared vCPU
+# (observed: still <2% done after several minutes). Building once here,
+# on a matching-glibc runner with real CPU, and shipping the binary is
+# the only practical way to get PQC support onto that instance.
+#
+# Manually triggered (workflow_dispatch) rather than on every push: the
+# upstream pins (liboqs/oqs-provider tags) rarely change, so there is no
+# need to rebuild on unrelated commits.
+on:
+  workflow_dispatch:
+    inputs:
+      liboqs_ref:
+        description: "liboqs git tag/ref to build"
+        required: true
+        default: "0.16.0"
+      oqs_provider_ref:
+        description: "oqs-provider git tag/ref to build"
+        required: true
+        default: "0.11.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build libssl-dev pkg-config git
+
+      - name: Build liboqs
+        run: |
+          git clone --depth 1 --branch "${{ inputs.liboqs_ref }}" https://github.com/open-quantum-safe/liboqs.git
+          cmake -S liboqs -B liboqs/build -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_PREFIX=/usr/local
+          cmake --build liboqs/build
+          sudo cmake --install liboqs/build
+          sudo ldconfig
+
+      - name: Build oqs-provider
+        run: |
+          git clone --depth 1 --branch "${{ inputs.oqs_provider_ref }}" https://github.com/open-quantum-safe/oqs-provider.git
+          cmake -S oqs-provider -B oqs-provider/build -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DOQS_PROVIDER_BUILD_STATIC=OFF \
+            -Dliboqs_DIR=/usr/local/lib/cmake/liboqs
+          cmake --build oqs-provider/build
+
+      - name: Package artifacts
+        run: |
+          mkdir -p dist
+          cp oqs-provider/build/lib/oqsprovider.so dist/
+          # oqsprovider.so dynamically links against liboqs's shared lib;
+          # ship the exact .so (with its SONAME symlink target) it was
+          # built against so the VM doesn't need to build liboqs either.
+          cp -P /usr/local/lib/liboqs.so* dist/
+          tar -C dist -czf oqsprovider-ubuntu24.04-amd64.tar.gz .
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="oqsprovider-${{ inputs.liboqs_ref }}-${{ inputs.oqs_provider_ref }}"
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" oqsprovider-ubuntu24.04-amd64.tar.gz \
+            --title "oqs-provider $TAG (ubuntu-24.04, amd64)" \
+            --notes "liboqs ${{ inputs.liboqs_ref }} + oqs-provider ${{ inputs.oqs_provider_ref }}, built for Ubuntu 24.04 amd64. Consumed by infra/scripts/startup.sh.tpl."

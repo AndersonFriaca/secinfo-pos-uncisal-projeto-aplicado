@@ -10,6 +10,50 @@ set -euo pipefail
 # runtime user is the hardcoded constant `appsvc`, and the operator's SSH key
 # is injected separately through instance metadata (compute.tf `ssh-keys`).
 
+# --- Stage 0: repair a broken oqsprovider activation from a prior boot ---
+# A prior version of Stage 8b's build function could report success even
+# when the oqs-provider build failed (a `set -e`-suppressed-by-`if`
+# bug — the function's exit status came from its last command, `rm -rf`,
+# not the actual build step). That let openssl.cnf activate a provider
+# module (oqsprovider.so) that was never built, which breaks OpenSSL
+# initialization for EVERY process on the box — including sshd's
+# per-connection crypto init ("PRNG is not seeded"), locking out SSH.
+# Detect and strip that block unconditionally, before anything else runs,
+# whenever the referenced .so is missing.
+OPENSSL_CNF="/etc/ssl/openssl.cnf"
+PQC_MARKER="# managed-by-terraform: oqsprovider activation"
+PQC_GROUPS_CONF="/etc/nginx/conf.d/pqc-groups.conf"
+MODULES_DIR="$(openssl version -m | sed -E 's/^MODULESDIR: "(.*)"$/\1/')"
+NEEDS_SERVICE_RECOVERY=false
+
+if grep -qF "$PQC_MARKER" "$OPENSSL_CNF" 2>/dev/null && [ ! -f "$MODULES_DIR/oqsprovider.so" ]; then
+  sed -i "/^$(printf '%s' "$PQC_MARKER" | sed 's/[.[\*^$/]/\\&/g')\$/,\$d" "$OPENSSL_CNF"
+  logger -t startup-script "repaired broken oqsprovider activation in $OPENSSL_CNF (module was never built)"
+  NEEDS_SERVICE_RECOVERY=true
+fi
+
+# Same story for the Nginx group directive: a prior boot could write
+# ssl_ecdh_curve referencing X25519MLKEM768 (from a build that later
+# turned out broken) and nothing ever cleaned it up afterwards, since the
+# stage that (re)writes it only fires when the group ISN'T already there.
+if [ -f "$PQC_GROUPS_CONF" ] && grep -qF "X25519MLKEM768" "$PQC_GROUPS_CONF" && [ ! -f "$MODULES_DIR/oqsprovider.so" ]; then
+  rm -f "$PQC_GROUPS_CONF"
+  logger -t startup-script "removed stale $PQC_GROUPS_CONF referencing X25519MLKEM768 (module was never built)"
+  NEEDS_SERVICE_RECOVERY=true
+fi
+
+if [ "$NEEDS_SERVICE_RECOVERY" = true ]; then
+  # ssh.service and nginx.service both initialize OpenSSL at their own
+  # startup (well before this script runs, during normal systemd boot).
+  # With the broken config still on disk at THAT point, both failed to
+  # start and tripped systemd's restart-rate-limit, so they're stuck
+  # "failed" for the rest of this boot even now that the file is fixed —
+  # nothing else would ever restart them otherwise.
+  systemctl reset-failed ssh.service nginx.service 2>/dev/null || true
+  systemctl restart ssh || true
+  systemctl restart nginx || true
+fi
+
 # --- Stage 1: base packages (apt install is naturally idempotent) ---
 # Node.js is NOT installed from apt here: Ubuntu 24.04 ships Node 18.19, but
 # next@16 requires engines.node >= 20.9.0. Stage 1b installs Node 24 LTS from
@@ -217,6 +261,88 @@ if systemctl list-timers --all 2>/dev/null | grep -qi certbot; then
   logger -t startup-script "certbot renewal timer present and enabled"
 else
   logger -t startup-script "no certbot renewal timer found on this system; renewal may need manual configuration"
+fi
+
+# --- Stage 8b: PQC (post-quantum) hybrid key exchange for Nginx TLS ---
+# PRD requires the TLS server test to show a PQC hybrid group active
+# (X25519MLKEM768 — ML-KEM-768 per FIPS 203, hybridized with X25519).
+# Ubuntu 24.04 ships OpenSSL 3.0.13, which has no ML-KEM/Kyber groups at
+# all — this must come from a provider, not a config directive alone.
+# oqs-provider (Open Quantum Safe) is a dynamically loaded OpenSSL 3
+# provider: install it once, register it in openssl.cnf, and every
+# process linked against system libssl (nginx included) gains the new
+# group with no nginx recompile.
+#
+# Building liboqs+oqs-provider FROM SOURCE on this box was tried and
+# abandoned: liboqs alone is ~2700 translation units, and e2-micro's
+# shared vCPU + 1 GiB RAM couldn't get through that in any reasonable
+# boot time (observed: still <2% done after several minutes; trimming
+# liboqs's build to save time broke oqs-provider's compile instead, since
+# its generated algorithm tables unconditionally reference every liboqs
+# SIG symbol regardless of what's actually enabled). Building once on a
+# matching-glibc GitHub Actions ubuntu-24.04 runner
+# (.github/workflows/build-oqsprovider.yml) and downloading the compiled
+# .so here instead turns this into a few-second curl, not a multi-hour
+# compile — and needs no compiler on the VM at all.
+#
+# Isolated in a function called from `if`, so a download failure (network
+# hiccup, release not yet published) can never abort the rest of this
+# script via `set -e` — the app must still deploy either way. Every step
+# is chained with explicit `|| return 1` rather than relying on `set -e`
+# alone: this function is invoked as an `if` condition, and bash
+# suppresses errexit for the entire command tested by `if` — a command
+# failing partway through would otherwise be silently ignored and the
+# function's return status would come from whatever ran last (this exact
+# bug previously made a failed build report success and corrupt
+# openssl.cnf, breaking OpenSSL — and SSH — machine-wide; see Stage 0).
+setup_pqc_provider() {
+  local modules_dir
+  modules_dir="$(openssl version -m | sed -E 's/^MODULESDIR: "(.*)"$/\1/')"
+  [ -f "$modules_dir/oqsprovider.so" ] && return 0
+
+  local release_tag="oqsprovider-0.16.0-0.11.0"
+  local asset="oqsprovider-ubuntu24.04-amd64.tar.gz"
+  local url="https://github.com/${github_repository}/releases/download/$release_tag/$asset"
+
+  local tmp_dir
+  tmp_dir="$(mktemp -d)" || return 1
+  curl -fsSL -o "$tmp_dir/$asset" "$url" || { rm -rf "$tmp_dir"; return 1; }
+  tar -C "$tmp_dir" -xzf "$tmp_dir/$asset" || { rm -rf "$tmp_dir"; return 1; }
+
+  [ -f "$tmp_dir/oqsprovider.so" ] || { rm -rf "$tmp_dir"; return 1; }
+  install -m 0644 "$tmp_dir/oqsprovider.so" "$modules_dir/oqsprovider.so" || { rm -rf "$tmp_dir"; return 1; }
+  # oqsprovider.so dynamically links against liboqs's shared lib; the
+  # release ships the exact .so (and its SONAME symlink) it was built
+  # against, so it must land in the runtime linker path too.
+  cp -P "$tmp_dir"/liboqs.so* /usr/local/lib/ || return 1
+  ldconfig
+
+  rm -rf "$tmp_dir"
+  return 0
+}
+
+if setup_pqc_provider; then
+  if ! grep -qF "$PQC_MARKER" "$OPENSSL_CNF"; then
+    cat >> "$OPENSSL_CNF" <<EOF
+
+$PQC_MARKER
+[provider_sect]
+oqsprovider = oqsprovider_sect
+
+[oqsprovider_sect]
+activate = 1
+EOF
+  fi
+
+  PQC_GROUPS_CONF="/etc/nginx/conf.d/pqc-groups.conf"
+  PQC_GROUPS_LINE="ssl_ecdh_curve X25519MLKEM768:x25519:prime256v1;"
+  if [ ! -f "$PQC_GROUPS_CONF" ] || ! grep -qF "$PQC_GROUPS_LINE" "$PQC_GROUPS_CONF"; then
+    echo "$PQC_GROUPS_LINE" > "$PQC_GROUPS_CONF"
+    nginx -t && systemctl reload nginx
+  fi
+  logger -t startup-script "PQC (X25519MLKEM768) provider active"
+else
+  logger -t startup-script "oqs-provider build failed; leaving TLS on classical groups only"
 fi
 
 # --- Stage 9: dedicated app service user + PM2 install + systemd registration ---
