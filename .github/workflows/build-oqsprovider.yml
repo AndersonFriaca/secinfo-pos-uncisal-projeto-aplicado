@@ -2,15 +2,22 @@ name: Build oqs-provider (PQC OpenSSL provider)
 
 # One-off/occasional build: compiles liboqs + oqs-provider on an
 # ubuntu-24.04 runner — the same OS/glibc as infra/compute.tf's
-# app-vm image — and publishes the resulting oqsprovider.so (plus the
-# liboqs shared libs it links against) as a GitHub Release asset.
+# app-vm image — and uploads the resulting oqsprovider.so (plus the
+# liboqs shared libs it links against) as a workflow run artifact.
 #
-# app-vm's startup.sh.tpl downloads that asset at boot instead of
-# compiling on the VM itself: liboqs is ~2700 translation units, which
-# does not finish in any reasonable time on an e2-micro's shared vCPU
-# (observed: still <2% done after several minutes). Building once here,
-# on a matching-glibc runner with real CPU, and shipping the binary is
-# the only practical way to get PQC support onto that instance.
+# Deliberately NOT published as a GitHub Release: app-vm doesn't fetch
+# from here directly (see infra/scripts/startup.sh.tpl's Stage 8b) — the
+# operator downloads this run's artifact once (`gh run download`) and
+# uploads it to the private GCS bucket in infra/artifacts.tf
+# (google_storage_bucket.vm_assets), which is what the VM actually reads
+# from at boot. That keeps the VM's runtime path independent of GitHub
+# Actions/Releases and needs no GCP credential in this workflow at all.
+#
+# liboqs is ~2700 translation units, which does not finish in any
+# reasonable time on app-vm's e2-micro shared vCPU (observed: still <2%
+# done after several minutes). Building once here, on a matching-glibc
+# runner with real CPU, and shipping the binary is the only practical
+# way to get PQC support onto that instance.
 #
 # Manually triggered (workflow_dispatch) rather than on every push: the
 # upstream pins (liboqs/oqs-provider tags) rarely change, so there is no
@@ -31,9 +38,6 @@ on:
         description: "oqs-provider git tag/ref to build"
         required: true
         default: "0.11.0"
-
-permissions:
-  contents: write
 
 jobs:
   build:
@@ -74,12 +78,9 @@ jobs:
           cp -P /usr/local/lib/liboqs.so* dist/
           tar -C dist -czf oqsprovider-ubuntu24.04-amd64.tar.gz .
 
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="oqsprovider-${{ inputs.liboqs_ref }}-${{ inputs.oqs_provider_ref }}"
-          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" oqsprovider-ubuntu24.04-amd64.tar.gz \
-            --title "oqs-provider $TAG (ubuntu-24.04, amd64)" \
-            --notes "liboqs ${{ inputs.liboqs_ref }} + oqs-provider ${{ inputs.oqs_provider_ref }}, built for Ubuntu 24.04 amd64. Consumed by infra/scripts/startup.sh.tpl."
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oqsprovider-ubuntu24.04-amd64
+          path: oqsprovider-ubuntu24.04-amd64.tar.gz
+          retention-days: 14
