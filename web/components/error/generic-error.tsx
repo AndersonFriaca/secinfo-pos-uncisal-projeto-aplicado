@@ -3,7 +3,11 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
 /** Known reasons the app redirects here for instead of showing raw JSON/HTML. */
-export type GenericErrorReason = "rate-limited" | "unavailable" | "unknown";
+export type GenericErrorReason =
+  | "rate-limited"
+  | "unavailable"
+  | "not-found"
+  | "unknown";
 
 const MESSAGES: Record<GenericErrorReason, { title: string; description: string }> = {
   "rate-limited": {
@@ -16,6 +20,10 @@ const MESSAGES: Record<GenericErrorReason, { title: string; description: string 
     description:
       "Não conseguimos concluir essa ação agora. Tente novamente em alguns minutos.",
   },
+  "not-found": {
+    title: "Página não encontrada",
+    description: "O endereço acessado não existe ou foi movido.",
+  },
   unknown: {
     title: "Algo deu errado",
     description:
@@ -25,7 +33,9 @@ const MESSAGES: Record<GenericErrorReason, { title: string; description: string 
 
 /** Normalizes any raw `?reason` query value into a known reason (defaults to "unknown"). */
 export function resolveErrorReason(reason: string | undefined): GenericErrorReason {
-  if (reason === "rate-limited" || reason === "unavailable") return reason;
+  if (reason === "rate-limited" || reason === "unavailable" || reason === "not-found") {
+    return reason;
+  }
   return "unknown";
 }
 
@@ -60,9 +70,14 @@ export function GenericError({
         ) : null}
       </Alert>
 
-      <Button asChild>
-        <Link href="/login">Voltar para o login</Link>
-      </Button>
+      <div className="flex flex-col gap-2">
+        <Button asChild>
+          <Link href="/">Voltar para o início</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/login">Voltar para o login</Link>
+        </Button>
+      </div>
     </main>
   );
 }
