@@ -1,0 +1,25 @@
+# Secrets
+.env
+.env.*
+!.env.local.example
+*.pem
+id_rsa*
+id_ed25519*
+credentials*.json
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.tfplan
+tfplan.out
+.terraform/
+backend.hcl
+!backend.hcl.example
+
+# Local AI-agent tooling — kept on disk, never committed.
+# .github/workflows is intentionally NOT ignored: CI/CD lives there.
+.claude/
+.agents/
+.github/skills/
+.specs/
