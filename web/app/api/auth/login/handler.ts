@@ -4,9 +4,13 @@
  * Order (T14): brute-force block check → `auth` rate limit → credential
  * exchange with Identity Platform → email-verification check → session cookie.
  * A blocked IP never reaches Identity Platform. An unknown email and a wrong
- * password produce byte-identical 401 responses. Identity Platform 5xx or a
- * rate-limit store failure becomes a 503 with a generic body and the upstream
- * detail logged server-side only. Every response carries `Cache-Control: no-store`.
+ * password produce byte-identical 303 redirects back to `/login?error=1`.
+ * Identity Platform 5xx or a rate-limit store failure, and a rate-limit hit,
+ * redirect to the generic `/error` page (the upstream detail is logged
+ * server-side only) — the form is a plain HTML POST with no JS, so the
+ * browser navigates directly to whatever this handler returns and a JSON
+ * body would render as raw text instead of a screen. Every response carries
+ * `Cache-Control: no-store`.
  *
  * Requirements: AUTH-07..AUTH-12, SEC-01..SEC-04.
  */
@@ -21,11 +25,6 @@ import {
   resetLoginFailures,
   resolveClientIp,
 } from "../../../../lib/security/rate-limit";
-
-/** AUTH-10: one message for an unknown email and a wrong password alike. */
-const INVALID_CREDENTIALS_ERROR = "E-mail ou senha inválidos";
-const UNAVAILABLE_ERROR = "Serviço temporariamente indisponível";
-const RATE_LIMITED_ERROR = "Muitas requisições";
 
 /** Session cookie name (Firebase convention, matches the design). */
 const SESSION_COOKIE = "__session";
@@ -65,21 +64,6 @@ const defaultDeps: LoginDeps = {
   isEmailVerified: decodeEmailVerified,
 };
 
-function json(
-  status: number,
-  body: unknown,
-  extraHeaders: Record<string, string> = {},
-): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "no-store",
-      ...extraHeaders,
-    },
-  });
-}
-
 function redirect(
   path: string,
   extraHeaders: Record<string, string> = {},
@@ -105,7 +89,7 @@ function serializeSessionCookie(value: string): string {
 }
 
 function invalidCredentials(): Response {
-  return json(401, { error: INVALID_CREDENTIALS_ERROR });
+  return redirect("/login?error=1");
 }
 
 async function readCredentials(
@@ -137,10 +121,8 @@ export async function handleLogin(
 
   const block = await deps.checkLoginBlock(ip);
   if (block.blocked) {
-    return json(
-      429,
-      { error: RATE_LIMITED_ERROR },
-      { "retry-after": String(block.retryAfterSeconds ?? 60) },
+    return redirect(
+      `/error?reason=rate-limited&retryAfter=${block.retryAfterSeconds ?? 60}`,
     );
   }
 
@@ -149,13 +131,11 @@ export async function handleLogin(
     limit = await deps.checkRateLimit(ip, "auth");
   } catch (error) {
     console.error("[login] rate-limit store failure", error);
-    return json(503, { error: UNAVAILABLE_ERROR });
+    return redirect("/error?reason=unavailable");
   }
   if (!limit.allowed) {
-    return json(
-      429,
-      { error: RATE_LIMITED_ERROR },
-      { "retry-after": String(limit.retryAfterSeconds ?? 60) },
+    return redirect(
+      `/error?reason=rate-limited&retryAfter=${limit.retryAfterSeconds ?? 60}`,
     );
   }
 
@@ -170,7 +150,7 @@ export async function handleLogin(
   if (!result.ok) {
     if (result.reason === "unavailable") {
       console.error("[login] identity platform unavailable");
-      return json(503, { error: UNAVAILABLE_ERROR });
+      return redirect("/error?reason=unavailable");
     }
     await deps.recordLoginFailure(ip);
     return invalidCredentials();

@@ -10,16 +10,32 @@ do cliente.
 
 ## Telas
 
-As telas de `/login`, `/signup` e `/verify-email` compartilham um mesmo
-formulário centralizado, sem cartão (`AuthShell`): título, descrição, campos e
-um botão de ação, com um link de rodapé para a tela irmã. O `/dashboard`
-renderiza um shell de aplicação com barra lateral (`AppSidebar` +
-`DashboardShell`) — marca, item "Painel" ativo e rodapé com o e-mail do
-usuário e o botão "Sair" — mais um cabeçalho com o atalho da barra e uma
-trilha (breadcrumb) e uma mensagem de boas-vindas centralizada. Nenhuma tela
-descreve os controles de segurança da aplicação; essa documentação vive no
-[`README.md`](../README.md#segurança-da-aplicação-owasp-top-10) e em
+As telas de `/login`, `/signup`, `/verify-email` e `/forgot-password`
+compartilham um mesmo formulário centralizado, sem cartão (`AuthShell`):
+título, descrição, campos e um botão de ação, com um link de rodapé para a
+tela irmã. O `/dashboard` renderiza um shell de aplicação com barra lateral
+(`AppSidebar` + `DashboardShell`) — marca, item "Painel" ativo e rodapé com o
+e-mail do usuário e o botão "Sair" — mais um cabeçalho com o atalho da barra e
+uma trilha (breadcrumb) e uma mensagem de boas-vindas centralizada. Nenhuma
+tela descreve os controles de segurança da aplicação; essa documentação vive
+no [`README.md`](../README.md#segurança-da-aplicação-owasp-top-10) e em
 [`docs/security.md`](./security.md).
+
+### Tratamento de erros
+
+Todo formulário da aplicação é um `<form>` HTML puro, sem JavaScript client-side
+— o navegador navega direto para o que a rota de API devolver. Por isso, uma
+rota de credencial nunca devolve um corpo JSON cru para o usuário: falhas
+específicas de campo (por exemplo, credenciais inválidas em
+`/api/auth/login`) redirecionam (`303`) de volta para a própria tela com um
+parâmetro de erro (`?error=1`), que o formulário lê e exibe como mensagem
+genérica; falhas sem campo associado (limite de requisições excedido,
+Identity Platform indisponível) redirecionam para `/error?reason=...`, uma
+tela de erro genérica (`components/error/generic-error.tsx`) que explica o
+problema em termos que o usuário entende e devolve um link para o login. Uma
+exceção não tratada em qualquer página é capturada pelo error boundary do
+Next.js em [`web/app/error.tsx`](../web/app/error.tsx), que reaproveita essa
+mesma tela em vez do overlay padrão do framework.
 
 ## Como roda
 

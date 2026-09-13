@@ -260,6 +260,15 @@ nomeia o mecanismo e o arquivo que o carrega.
   [`web/app/api/auth/login/handler.ts`](web/app/api/auth/login/handler.ts))
   trata um token malformado como "não verificado" — fail-closed documentado em
   comentário, não um erro engolido por acidente.
+- **Sem corpo JSON cru exposto ao usuário.** Os formulários são `<form>` HTML
+  puro (sem JavaScript client-side), então o que uma rota de API devolve é o
+  que o navegador renderiza. Toda falha sem campo associado (limite de
+  requisições excedido, Identity Platform indisponível) redireciona (`303`)
+  para `/error?reason=...`, uma tela genérica em
+  [`web/components/error/generic-error.tsx`](web/components/error/generic-error.tsx),
+  em vez de deixar o navegador exibir o JSON bruto do erro. Exceções não
+  tratadas em qualquer página caem no error boundary do Next.js em
+  [`web/app/error.tsx`](web/app/error.tsx), que reaproveita a mesma tela.
 
 ## Notas para agentes
 

@@ -33,17 +33,28 @@ cadastro → e-mail de verificação (Identity Platform envia) → login → `/d
 `npm test` / `npm run lint` / `npm run typecheck` / `npm run build` rodam sem
 credencial nenhuma.
 
-## Learn More
+## Estrutura
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/                 Rotas do App Router: páginas (login, signup, dashboard,
+                      forgot-password, verify-email, error) e handlers de
+                      `/api/auth/*`
+components/           Componentes de UI, agrupados por tela (auth/, error/, ui/)
+lib/                  Auth (Identity Platform, sessão), segurança
+                      (rate limit, CSRF, headers), validação
+proxy.ts               Middleware: CSP, nonce, CSRF, headers de segurança
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Esta aplicação **não é implantada na Vercel** — ela roda em uma VM `e2-micro`
+do GCP atrás de Nginx, via um pipeline de CI/CD dedicado (build standalone →
+GitHub Actions → PM2). Consulte
+[`docs/application.md`](../docs/application.md) para o fluxo de CI/CD e
+[`docs/deployment.md`](../docs/deployment.md) para o passo a passo completo de
+infraestrutura.
 
-## Deploy on Vercel
+## Saiba mais
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Documentação do Next.js](https://nextjs.org/docs) — recursos e API do framework.
+- [`docs/application.md`](../docs/application.md) — como esta aplicação roda em produção, CI/CD e mitigações do OWASP Top 10.

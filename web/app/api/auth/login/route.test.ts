@@ -53,7 +53,7 @@ describe("POST /api/auth/login (T14)", () => {
     expect(d.recordLoginFailure).not.toHaveBeenCalled();
   });
 
-  it("invalid credentials → 401 generic message and the failure counter incremented", async () => {
+  it("invalid credentials → 303 /login?error=1 and the failure counter incremented", async () => {
     const d = deps({
       signInWithPassword: vi.fn(async () => ({
         ok: false as const,
@@ -61,10 +61,19 @@ describe("POST /api/auth/login (T14)", () => {
       })),
     });
     const res = await handleLogin(formRequest(CREDS), d);
-    expect(res.status).toBe(401);
-    expect((await res.json()).error).toBe("E-mail ou senha inválidos");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/login?error=1");
     expect(d.recordLoginFailure).toHaveBeenCalledWith("203.0.113.9");
     expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("empty/missing credentials → 303 /login?error=1 and the failure counter incremented", async () => {
+    const d = deps();
+    const res = await handleLogin(formRequest({ email: "", password: "" }), d);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/login?error=1");
+    expect(d.recordLoginFailure).toHaveBeenCalledWith("203.0.113.9");
+    expect(d.signInWithPassword).not.toHaveBeenCalled();
   });
 
   it("unknown email and wrong password produce byte-identical responses", async () => {
@@ -83,7 +92,7 @@ describe("POST /api/auth/login (T14)", () => {
       deps(invalid),
     );
     expect(a.status).toBe(b.status);
-    expect(await a.clone().text()).toBe(await b.clone().text());
+    expect(a.headers.get("location")).toBe(b.headers.get("location"));
     expect(a.headers.get("set-cookie")).toBeNull();
     expect(b.headers.get("set-cookie")).toBeNull();
   });
@@ -97,7 +106,7 @@ describe("POST /api/auth/login (T14)", () => {
     expect(d.createSession).not.toHaveBeenCalled();
   });
 
-  it("blocked IP → 429 with Retry-After: 60 and Identity Platform is not called", async () => {
+  it("blocked IP → 303 /error?reason=rate-limited&retryAfter=60 and Identity Platform is not called", async () => {
     const d = deps({
       checkLoginBlock: vi.fn(async () => ({
         blocked: true,
@@ -105,12 +114,29 @@ describe("POST /api/auth/login (T14)", () => {
       })),
     });
     const res = await handleLogin(formRequest(CREDS), d);
-    expect(res.status).toBe(429);
-    expect(res.headers.get("retry-after")).toBe("60");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "/error?reason=rate-limited&retryAfter=60",
+    );
     expect(d.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it("Identity Platform 5xx → 503 generic body, upstream detail not in the response", async () => {
+  it("rate limit exceeded → 303 /error?reason=rate-limited&retryAfter=<n>", async () => {
+    const d = deps({
+      checkRateLimit: vi.fn(async () => ({
+        allowed: false,
+        retryAfterSeconds: 30,
+      })),
+    });
+    const res = await handleLogin(formRequest(CREDS), d);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "/error?reason=rate-limited&retryAfter=30",
+    );
+    expect(d.signInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("Identity Platform 5xx → 303 /error?reason=unavailable, upstream detail not in the response", async () => {
     const d = deps({
       signInWithPassword: vi.fn(async () => ({
         ok: false as const,
@@ -118,20 +144,20 @@ describe("POST /api/auth/login (T14)", () => {
       })),
     });
     const res = await handleLogin(formRequest(CREDS), d);
-    expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "Serviço temporariamente indisponível" });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/error?reason=unavailable");
     expect(errorSpy).toHaveBeenCalled();
   });
 
-  it("rate-limit store failure → 503 generic body", async () => {
+  it("rate-limit store failure → 303 /error?reason=unavailable", async () => {
     const d = deps({
       checkRateLimit: vi.fn(async () => {
         throw new Error("store unavailable");
       }),
     });
     const res = await handleLogin(formRequest(CREDS), d);
-    expect(res.status).toBe(503);
-    expect((await res.json()).error).toBe("Serviço temporariamente indisponível");
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe("/error?reason=unavailable");
     expect(d.signInWithPassword).not.toHaveBeenCalled();
   });
 
