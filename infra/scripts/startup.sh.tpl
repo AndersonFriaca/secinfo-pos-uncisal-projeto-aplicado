@@ -11,34 +11,39 @@ set -euo pipefail
 # is injected separately through instance metadata (compute.tf `ssh-keys`).
 
 # --- Stage 0: repair a broken oqsprovider activation from a prior boot ---
-# A prior version of Stage 8b's build function could report success even
-# when the oqs-provider build failed (a `set -e`-suppressed-by-`if`
-# bug — the function's exit status came from its last command, `rm -rf`,
-# not the actual build step). That let openssl.cnf activate a provider
-# module (oqsprovider.so) that was never built, which breaks OpenSSL
-# initialization for EVERY process on the box — including sshd's
+# Two different prior bugs both landed here: (1) a build function that
+# could report success even when the build failed, activating a provider
+# module that was never built; (2) a build that WAS present on disk but
+# failed to actually load at OpenSSL init ("library has no ciphers") for
+# reasons that don't matter here — either way OpenSSL fails to
+# initialize for EVERY process on the box, including sshd's
 # per-connection crypto init ("PRNG is not seeded"), locking out SSH.
-# Detect and strip that block unconditionally, before anything else runs,
-# whenever the referenced .so is missing.
+#
+# Rather than re-guessing every way this module can be broken, detect it
+# the same way OpenSSL itself will: try to actually test the Nginx TLS
+# config with the current openssl.cnf. If that fails while our marker is
+# present, strip the activation unconditionally — regardless of whether
+# the .so file exists, is corrupt, or is merely incompatible.
 OPENSSL_CNF="/etc/ssl/openssl.cnf"
 PQC_MARKER="# managed-by-terraform: oqsprovider activation"
 PQC_GROUPS_CONF="/etc/nginx/conf.d/pqc-groups.conf"
 MODULES_DIR="$(openssl version -m | sed -E 's/^MODULESDIR: "(.*)"$/\1/')"
 NEEDS_SERVICE_RECOVERY=false
 
-if grep -qF "$PQC_MARKER" "$OPENSSL_CNF" 2>/dev/null && [ ! -f "$MODULES_DIR/oqsprovider.so" ]; then
+if grep -qF "$PQC_MARKER" "$OPENSSL_CNF" 2>/dev/null && ! nginx -t >/dev/null 2>&1; then
   sed -i "/^$(printf '%s' "$PQC_MARKER" | sed 's/[.[\*^$/]/\\&/g')\$/,\$d" "$OPENSSL_CNF"
-  logger -t startup-script "repaired broken oqsprovider activation in $OPENSSL_CNF (module was never built)"
+  rm -f "$MODULES_DIR/oqsprovider.so"
+  logger -t startup-script "repaired broken oqsprovider activation in $OPENSSL_CNF (nginx -t failed with it active)"
   NEEDS_SERVICE_RECOVERY=true
 fi
 
 # Same story for the Nginx group directive: a prior boot could write
-# ssl_ecdh_curve referencing X25519MLKEM768 (from a build that later
-# turned out broken) and nothing ever cleaned it up afterwards, since the
-# stage that (re)writes it only fires when the group ISN'T already there.
+# ssl_ecdh_curve referencing X25519MLKEM768 and nothing ever cleaned it
+# up afterwards once the provider backing it got removed just above (the
+# stage that (re)writes it only fires when the group ISN'T already there).
 if [ -f "$PQC_GROUPS_CONF" ] && grep -qF "X25519MLKEM768" "$PQC_GROUPS_CONF" && [ ! -f "$MODULES_DIR/oqsprovider.so" ]; then
   rm -f "$PQC_GROUPS_CONF"
-  logger -t startup-script "removed stale $PQC_GROUPS_CONF referencing X25519MLKEM768 (module was never built)"
+  logger -t startup-script "removed stale $PQC_GROUPS_CONF referencing X25519MLKEM768 (provider not active)"
   NEEDS_SERVICE_RECOVERY=true
 fi
 
@@ -328,8 +333,18 @@ setup_pqc_provider() {
   # against, so it must land in the runtime linker path too.
   cp -P "$tmp_dir"/liboqs.so* /usr/local/lib/ || return 1
   ldconfig
-
   rm -rf "$tmp_dir"
+
+  # Load the module standalone, BEFORE ever touching the global
+  # openssl.cnf: a provider that dlopens fine but fails at OpenSSL init
+  # (ABI mismatch, missing symbol, whatever) must never reach system-wide
+  # config, since that breaks OpenSSL — and SSH — for every process on
+  # the box (Stage 0 exists only because this validation didn't, once).
+  if ! openssl list -provider oqsprovider -providers 2>&1 | grep -qi oqsprovider; then
+    rm -f "$modules_dir/oqsprovider.so" /usr/local/lib/liboqs.so*
+    return 1
+  fi
+
   return 0
 }
 
