@@ -63,12 +63,22 @@ pm2 list                                       # PM2's process table (empty unti
 sudo certbot certificates                      # current cert, expiry date
 systemctl list-timers | grep certbot           # confirms the renewal timer is scheduled
 sudo nginx -T | grep -E 'listen|proxy_pass|ssl_certificate'
+openssl list -providers                        # "oqsprovider" deve aparecer como "active"
 ```
 
 Para testar a renovação sem esperar ela disparar de fato:
 
 ```bash
 sudo certbot renew --dry-run
+```
+
+Para confirmar o suporte a PQC de fora (sem precisar de SSH) — veja
+[security.md](security.md#pqc-troca-de-chaves-pós-quântica-híbrida) para o
+que esse grupo significa:
+
+```bash
+openssl s_client -connect <ip>:443 -groups X25519MLKEM768:X25519 -tls1_3 </dev/null 2>&1 \
+  | grep -i "negotiated tls1.3 group"
 ```
 
 ## Lendo o log de boot

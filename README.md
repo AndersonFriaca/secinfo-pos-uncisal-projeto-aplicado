@@ -8,7 +8,9 @@ Consulte [`prd.md`](prd.md) para os requisitos completos da disciplina
 Este repositório provisiona apenas a camada de infraestrutura — a aplicação em
 si é construída em uma feature separada. Uma VM `e2-micro` endurecida serve
 HTTPS (certificado real da Let's Encrypt, sem necessidade de domínio) via
-Nginx. A porta `:22` fica pública e aberta para a banca avaliadora da
+Nginx, com suporte a troca de chaves **pós-quântica híbrida** (`X25519MLKEM768`,
+ML-KEM-768 por FIPS 203) — veja [security.md](docs/security.md#pqc-troca-de-chaves-pós-quântica-híbrida).
+A porta `:22` fica pública e aberta para a banca avaliadora da
 disciplina, mas é somente por chave (`PasswordAuthentication no`), protegida
 por Fail2ban e por uma Shielded VM; a variável `operator_ssh_cidrs` permite
 restringir esse acesso a CIDRs específicos. Tudo é fixado para permanecer

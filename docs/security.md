@@ -65,6 +65,52 @@ falhar (rate limit, problema de rede transitório), o script de inicialização
 registra isso e deixa o Nginx servindo HTTP puro em vez de deixá-lo quebrado —
 um site funcionando em HTTP é melhor que um script que desiste por completo.
 
+## PQC: troca de chaves pós-quântica híbrida
+
+O Nginx oferece o grupo híbrido **`X25519MLKEM768`** (ML-KEM-768, padronizado
+no FIPS 203, combinado com X25519 clássico) no handshake TLS 1.3 — o que
+checadores como o Digicert TLS quantum readiness check e o Qualys SSL Labs
+detectam como "supports PQC (Post-Quantum Cryptography) key exchange".
+Verifique com:
+
+```bash
+openssl s_client -connect <ip>:443 -groups X25519MLKEM768:X25519 -tls1_3 </dev/null 2>&1 \
+  | grep -i "negotiated tls1.3 group"
+```
+
+O Ubuntu 24.04 traz OpenSSL 3.0.13, que **não tem nenhum grupo ML-KEM/Kyber
+nativamente** — isso só existe via [oqs-provider](https://github.com/open-quantum-safe/oqs-provider)
+(Open Quantum Safe), um provider OpenSSL 3 carregado dinamicamente que
+registra o grupo sem precisar recompilar o Nginx nem o OpenSSL do sistema.
+
+- **Compilar na própria VM foi tentado e abandonado.** O `liboqs` sozinho tem
+  ~2700 unidades de compilação; o vCPU compartilhado da `e2-micro` não dá
+  conta disso em tempo de boot razoável (observado ao vivo: menos de 2% depois
+  de vários minutos). `.github/workflows/build-oqsprovider.yml` compila
+  `liboqs` + `oqs-provider` uma vez, offline, num runner `ubuntu-24.04` do
+  GitHub Actions (mesma glibc da VM) — o binário resultante é enviado
+  manualmente (`gcloud storage cp`) para o bucket privado
+  `google_storage_bucket.vm_assets` (`infra/artifacts.tf`).
+- **O bucket é privado**, com `roles/storage.objectViewer` concedido apenas à
+  service account da própria VM (`infra/artifacts.tf`) — o download no boot
+  (Estágio 8b) autentica com um token OAuth obtido do metadata server da
+  instância, sem nenhum credential novo para gerenciar.
+- **As versões de `liboqs` e `oqs-provider` não são intercambiáveis entre si**
+  — cada release do `oqs-provider` documenta no seu próprio `RELEASE.md` a
+  tag exata de `liboqs` com a qual foi testado (0.11.0 ↔ 0.15.0, por exemplo).
+  Um par incompatível falha a compilar com símbolos indefinidos
+  (`OQS_SIG_alg_sphincs_*`), não com um erro óbvio de versão.
+- **Ativação em `openssl.cnf` precisa ser autocontida.** Só adicionar
+  `oqsprovider = oqsprovider_sect` a um `[provider_sect]` que supostamente já
+  existe é frágil — se o Ubuntu não tiver esse scaffolding pronto, o append
+  vira a *única* definição de `[provider_sect]`, o que desativa o provider
+  `default` inteiro (`library has no ciphers`, TLS quebra para todo mundo). O
+  Estágio 8b declara `openssl_conf`/`[openssl_init]`/`[provider_sect]` do zero,
+  listando `default` e `oqsprovider` explicitamente.
+- Veja [troubleshooting.md](troubleshooting.md#3-reload-do-nginx-não-recarrega-o-provider-oqsprovider)
+  para o bug mais sutil: `systemctl reload nginx` não é suficiente para
+  ativar um provider OpenSSL novo — é preciso `restart`.
+
 ## Shielded VM
 
 `infra/compute.tf` habilita `enable_secure_boot`, `enable_vtpm` e

@@ -73,6 +73,8 @@ publicado ali — isso é esperado; o deploy da aplicação é uma feature separ
 | `infra/scripts/startup.sh.tpl` | (instance metadata) | Provisionamento idempotente no boot — veja a lista de estágios abaixo |
 | `infra/scripts/ecosystem.config.js` | (copiado para `/opt/app`) | Definição do processo PM2 para a futura aplicação Next.js |
 | `infra/backend.tf` | `terraform { backend "gcs" {} }` | Aponta para o bucket de bootstrap via `-backend-config` (nunca um nome de bucket hardcoded — veja [security.md](security.md)) |
+| `infra/artifacts.tf` | `google_storage_bucket`, `google_storage_bucket_iam_member` | Bucket privado `vm-assets` para binários pré-compilados (hoje: `oqsprovider.so` do PQC) — leitura só pela service account da própria VM |
+| `.github/workflows/build-oqsprovider.yml` | (GitHub Actions, `workflow_dispatch`) | Compila `liboqs` + `oqs-provider` uma vez, offline, num runner `ubuntu-24.04`; artefato é enviado manualmente ao bucket acima — veja [security.md](security.md#pqc-troca-de-chaves-pós-quântica-híbrida) |
 | `ops/vm-start.sh`, `ops/vm-stop.sh` | (chamadas imperativas de `gcloud`) | Reserva/anexa/libera um IP estático em torno do tempo real de atividade da VM — veja [operations.md](operations.md) |
 
 ## Estágios do script de inicialização
@@ -82,6 +84,9 @@ publicado ali — isso é esperado; o deploy da aplicação é uma feature separ
 cada um se protege sozinho, de modo que um re-run é um no-op seguro onde nada
 mudou:
 
+0. Auto-reparo: se uma ativação anterior do provider PQC quebrou o
+   `openssl.cnf` (detectado via `nginx -t`), desfaz e restaura SSH/Nginx —
+   roda antes de qualquer outro estágio
 1. Pacotes base (`nginx`, `fail2ban`, `snapd`, `curl`, `ca-certificates`)
 1b. Node.js 24 LTS via NodeSource (o `apt` do Ubuntu 24.04 traz o Node 18)
 2. Hardening de SSH — `PasswordAuthentication no`
@@ -91,8 +96,10 @@ mudou:
 6. Obtenção de um certificado de endereço IP da Let's Encrypt
 7. Server block HTTPS + redirect HTTP→HTTPS
 8. Confirma/habilita o timer de renovação do Certbot
+8b. Ativa PQC (`X25519MLKEM768`) no TLS do Nginx via `oqs-provider` — veja
+    [security.md](security.md#pqc-troca-de-chaves-pós-quântica-híbrida)
 9. Usuário de serviço `appsvc` + instalação do PM2 + registro no systemd (`pm2-appsvc`)
 10. Diretório `/opt/app` + reverse proxy do Nginx para `localhost:3000`
 
-Veja [troubleshooting.md](troubleshooting.md) para dois bugs reais
-encontrados apenas ao rodar isto contra uma VM ao vivo.
+Veja [troubleshooting.md](troubleshooting.md) para bugs reais encontrados
+apenas ao rodar isto contra uma VM ao vivo.
