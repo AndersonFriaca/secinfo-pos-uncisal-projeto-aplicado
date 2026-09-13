@@ -323,7 +323,16 @@ setup_pqc_provider() {
 
   local tmp_dir
   tmp_dir="$(mktemp -d)" || return 1
-  gcloud storage cp "gs://${oqs_artifacts_bucket}/$asset" "$tmp_dir/$asset" || { rm -rf "$tmp_dir"; return 1; }
+
+  # DNS/network isn't always up yet this early in boot (the same class of
+  # flakiness Stage 1's apt-get update hits) — retry a few times with a
+  # short backoff instead of giving up on the first transient failure.
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    gcloud storage cp "gs://${oqs_artifacts_bucket}/$asset" "$tmp_dir/$asset" && break
+    [ "$attempt" -eq 5 ] && { rm -rf "$tmp_dir"; return 1; }
+    sleep 10
+  done
   tar -C "$tmp_dir" -xzf "$tmp_dir/$asset" || { rm -rf "$tmp_dir"; return 1; }
 
   [ -f "$tmp_dir/oqsprovider.so" ] || { rm -rf "$tmp_dir"; return 1; }
