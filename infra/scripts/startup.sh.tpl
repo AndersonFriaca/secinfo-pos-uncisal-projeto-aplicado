@@ -359,11 +359,33 @@ setup_pqc_provider() {
 
 if setup_pqc_provider; then
   if ! grep -qF "$PQC_MARKER" "$OPENSSL_CNF"; then
+    # Fully self-contained rather than "just add oqsprovider to whatever
+    # provider_sect already exists": an earlier version assumed Ubuntu's
+    # stock openssl.cnf already wires up `[provider_sect] default =
+    # default_sect` and only appended the oqsprovider line — but if that
+    # scaffolding ISN'T already there, this append becomes the ONLY
+    # provider_sect definition, activating oqsprovider alone and
+    # switching the default provider off entirely ("library has no
+    # ciphers": no cipher/algorithm providers left active at all).
+    # Re-declaring openssl_conf/openssl_init here and explicitly listing
+    # both default and oqsprovider is correct regardless of what the
+    # stock file already had: OpenSSL config sections are cumulative
+    # when reopened by name, and a later scalar assignment (openssl_conf)
+    # wins over an earlier one.
     cat >> "$OPENSSL_CNF" <<EOF
 
 $PQC_MARKER
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+
 [provider_sect]
+default = default_sect
 oqsprovider = oqsprovider_sect
+
+[default_sect]
+activate = 1
 
 [oqsprovider_sect]
 activate = 1
