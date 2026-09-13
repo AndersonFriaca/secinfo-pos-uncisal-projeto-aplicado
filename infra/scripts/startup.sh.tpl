@@ -414,11 +414,21 @@ activate = 1
 EOF
   fi
 
-  PQC_GROUPS_CONF="/etc/nginx/conf.d/pqc-groups.conf"
   PQC_GROUPS_LINE="ssl_ecdh_curve X25519MLKEM768:x25519:prime256v1;"
   if [ ! -f "$PQC_GROUPS_CONF" ] || ! grep -qF "$PQC_GROUPS_LINE" "$PQC_GROUPS_CONF"; then
     echo "$PQC_GROUPS_LINE" > "$PQC_GROUPS_CONF"
-    nginx -t && systemctl reload nginx
+    # `reload` (SIGHUP) only makes the long-running master spawn new
+    # WORKER processes — it does not make the master itself re-init
+    # OpenSSL's global provider set. That set gets established once,
+    # lazily, the first time OpenSSL is actually used in that process
+    # (nginx's own master, started at early boot before oqsprovider was
+    # ever activated), and forked workers inherit that stale in-memory
+    # state regardless of what openssl.cnf says by the time of a later
+    # reload. Confirmed live: `nginx -t` (a fresh, separate process)
+    # succeeded with this exact directive while the running WORKER still
+    # rejected it at actual TLS handshake time with the identical string.
+    # A full restart is required to get a fresh master process.
+    nginx -t && systemctl restart nginx
   fi
   logger -t startup-script "PQC (X25519MLKEM768) provider active"
 else
