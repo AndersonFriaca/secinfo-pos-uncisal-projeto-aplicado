@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/compare/v1.1.0...v1.2.0) (2026-09-13)
+
+
+### Features
+
+* **web:** add 404 page and a home button on the generic error screen ([68e9f50](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/commit/68e9f5093739e9e5314f8ad779208187fc2cf973))
+* **web:** redirect an already-signed-in user away from /login ([73af3fd](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/commit/73af3fd52ec48de7e9250eada958be1d6385c016))
+* **web:** sync dark theme + cyan accent to design system ([839279f](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/commit/839279ff1419726f6fbda4ee77ae2317a100f3aa))
+
+
+### Bug Fixes
+
+* **web:** show a pointer cursor on buttons ([5e93da8](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/commit/5e93da8c651fdcf9434cfa02de8ebd81942fd901))
+* **web:** show login errors on-screen instead of raw JSON, add generic error page ([116d220](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/commit/116d2204a8181afa3d9573f6bd8dc5a0a3bbb2cc))
+
 ## [1.1.0](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/compare/v1.0.0...v1.1.0) (2026-09-13)
 
 
