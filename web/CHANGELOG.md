@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/compare/v1.0.0...v1.1.0) (2026-09-13)
+
+
+### Features
+
+* **web:** Next.js app with hardened auth, dashboard, and OWASP-mitigated security ([43a2d96](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/commit/43a2d96254af3fd9800916bc6fc9ef0dd61c7be4))
+
 ## [1.0.0](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/compare/v0.1.0...v1.0.0) (2026-09-07)
 
 
