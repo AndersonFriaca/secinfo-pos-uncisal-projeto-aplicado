@@ -272,9 +272,3 @@ e o arquivo responsável.
   [`web/components/error/generic-error.tsx`](web/components/error/generic-error.tsx).
   Exceções não tratadas em qualquer página caem no error boundary do Next.js
   em [`web/app/error.tsx`](web/app/error.tsx), que reutiliza a mesma tela.
-
-## Notas para agentes
-
-Agentes de IA devem ler [`CLAUDE.md`](CLAUDE.md) antes de operar a VM ou
-editar `infra/scripts/startup.sh.tpl` e `.github/workflows/deploy.yml`: ele
-documenta o fluxo obrigatório de start/stop e as regressões conhecidas.
