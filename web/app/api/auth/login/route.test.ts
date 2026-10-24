@@ -97,12 +97,16 @@ describe("POST /api/auth/login (T14)", () => {
     expect(b.headers.get("set-cookie")).toBeNull();
   });
 
-  it("valid credentials but an unverified email → 303 /verify-email and no session cookie", async () => {
+  it("valid credentials but an unverified email → 303 /verify-email with only the verify cookie", async () => {
     const d = deps({ isEmailVerified: () => false });
     const res = await handleLogin(formRequest(CREDS), d);
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/verify-email");
-    expect(res.headers.get("set-cookie")).toBeNull();
+    const cookie = res.headers.get("set-cookie")!;
+    expect(cookie).toMatch(/^__verify=/);
+    expect(cookie).toContain("Path=/api/auth/resend-verification");
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).not.toContain("__session");
     expect(d.createSession).not.toHaveBeenCalled();
   });
 

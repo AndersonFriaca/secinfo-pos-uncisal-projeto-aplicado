@@ -13,14 +13,13 @@ describe("VerifyEmailForm", () => {
     expect(html).toContain('value="the-token"');
   });
 
-  it("renders email and password fields with current-password autocomplete", () => {
+  it("asks for no credentials — only the resend button", () => {
     const html = renderToStaticMarkup(
       <VerifyEmailForm csrfToken="tok" resent={false} />,
     );
-    expect(html).toContain('name="email"');
-    expect(html).toContain('type="email"');
-    expect(html).toContain('name="password"');
-    expect(html).toContain('autoComplete="current-password"');
+    expect(html).not.toContain('name="email"');
+    expect(html).not.toContain('name="password"');
+    expect(html).toContain("Reenviar e-mail de verificação");
   });
 
   it("shows the resend alert with RESENT_MESSAGE when resent is true", () => {
@@ -38,10 +37,10 @@ describe("VerifyEmailForm", () => {
     expect(html).not.toContain('role="alert"');
   });
 
-  it("links the footer to /login", () => {
+  it("offers a login button linking to /login", () => {
     const html = renderToStaticMarkup(
       <VerifyEmailForm csrfToken="tok" resent={false} />,
     );
-    expect(html).toContain('href="/login"');
+    expect(html).toMatch(/<a[^>]*href="\/login"[^>]*>Entrar<\/a>/);
   });
 });

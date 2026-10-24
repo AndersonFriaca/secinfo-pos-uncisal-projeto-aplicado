@@ -18,6 +18,7 @@
 import { normalizeEmail } from "../../../../lib/validation/credentials";
 import { signInWithPassword } from "../../../../lib/auth/identity-platform";
 import { createSession, sessionCookieOptions } from "../../../../lib/auth/session";
+import { serializeVerifyCookie } from "../../../../lib/auth/verify-cookie";
 import {
   checkLoginBlock,
   checkRateLimit,
@@ -159,7 +160,9 @@ export async function handleLogin(
   await deps.resetLoginFailures(ip);
 
   if (!deps.isEmailVerified(result.idToken)) {
-    return redirect("/verify-email");
+    return redirect("/verify-email", {
+      "set-cookie": serializeVerifyCookie(result.idToken),
+    });
   }
 
   const cookie = await deps.createSession(result.idToken);

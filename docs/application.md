@@ -4,8 +4,8 @@ O diretório `web/` contém a aplicação Next.js 16 do projeto (App Router,
 TypeScript, renderização no servidor). Funcionalidades: landing page pública,
 cadastro self-service com verificação de e-mail, login server-side, dashboard
 autenticado e logout. A autenticação usa o Firebase / GCP Identity Platform
-pela API REST server-side; o navegador recebe apenas um cookie de sessão
-`HttpOnly` e um token CSRF. Nenhuma API key, project ID ou configuração do
+pela API REST server-side; o navegador recebe apenas cookies `HttpOnly` (sessão e,
+antes da verificação, `__verify`) e um token CSRF. Nenhuma API key, project ID ou configuração do
 Firebase entra no bundle do cliente.
 
 Instruções para execução local estão em [`web/README.md`](../web/README.md).
@@ -17,7 +17,10 @@ mesmo layout de formulário centralizado (`AuthShell`): título, descrição,
 campos, botão de ação e link de rodapé para a tela irmã. `/dashboard`
 renderiza um shell com barra lateral (`AppSidebar` + `DashboardShell`) —
 marca, item "Painel" ativo, rodapé com o e-mail do usuário e botão "Sair" —
-mais um cabeçalho com o toggle da barra lateral e breadcrumb. As telas não
+mais um cabeçalho com o toggle da barra lateral e breadcrumb.
+`/verify-email` não tem campos: oferece apenas o botão "Reenviar e-mail de
+verificação" (que usa o cookie `__verify` emitido no cadastro/login) e o botão
+"Entrar". Todo reenvio responde com a mesma mensagem genérica. As telas não
 descrevem os controles de segurança; essa documentação está no
 [`README.md`](../README.md#segurança-da-aplicação-owasp-top-102025) e em
 [`security.md`](./security.md).

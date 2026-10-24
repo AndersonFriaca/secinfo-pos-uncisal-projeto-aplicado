@@ -10,7 +10,9 @@
  * again with the matching `Alert` instead of a raw JSON page (AUTH-18). An
  * already-registered email produces the byte-identical `error=invalid`
  * redirect as any other upstream signup rejection (AUTH-04 — no enumeration).
- * Every response carries `Cache-Control: no-store`.
+ * Success sets the `__verify` cookie (see `lib/auth/verify-cookie.ts`) so the
+ * resend button on `/verify-email` needs no credentials. Every response
+ * carries `Cache-Control: no-store`.
  *
  * Requirements: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-18.
  */
@@ -20,6 +22,7 @@ import {
   validatePassword,
 } from "../../../../lib/validation/credentials";
 import { signUp, sendVerificationEmail } from "../../../../lib/auth/identity-platform";
+import { serializeVerifyCookie } from "../../../../lib/auth/verify-cookie";
 import { checkRateLimit, resolveClientIp } from "../../../../lib/security/rate-limit";
 
 export type SignupDeps = {
@@ -36,7 +39,10 @@ const defaultDeps: SignupDeps = {
   resolveClientIp,
 };
 
-function redirect(path: string): Response {
+function redirect(
+  path: string,
+  extraHeaders: Record<string, string> = {},
+): Response {
   return new Response(null, {
     status: 303,
     headers: {
@@ -45,6 +51,7 @@ function redirect(path: string): Response {
       // the browser's form-action 'self' CSP.
       location: path,
       "cache-control": "no-store",
+      ...extraHeaders,
     },
   });
 }
@@ -101,6 +108,9 @@ export async function handleSignup(
   }
 
   await deps.sendVerificationEmail(created.idToken);
-  return redirect("/verify-email");
+  // Lets the verify-email screen resend without asking for the password.
+  return redirect("/verify-email", {
+    "set-cookie": serializeVerifyCookie(created.idToken),
+  });
 }
 

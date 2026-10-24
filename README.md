@@ -175,7 +175,13 @@ e o arquivo responsável.
   tokens CSRF usam `crypto.getRandomValues` (≥ 32 bytes, nunca derivados da
   sessão ou de timestamp). Veja
   [`web/lib/auth/session.ts`](web/lib/auth/session.ts) e
-  [`web/lib/security/csrf.ts`](web/lib/security/csrf.ts). O HSTS
+  [`web/lib/security/csrf.ts`](web/lib/security/csrf.ts). Após o cadastro
+  (ou um login com e-mail ainda não verificado), o ID token vai num cookie
+  `__verify` com `HttpOnly`, `Secure`, `SameSite=Strict`, TTL de 1 hora e
+  `Path=/api/auth/resend-verification` — nenhuma página o recebe; ele permite
+  que o botão "Reenviar" de `/verify-email` funcione sem pedir e-mail e senha
+  de novo ([`web/lib/auth/verify-cookie.ts`](web/lib/auth/verify-cookie.ts)).
+  O HSTS
   (`max-age=63072000; includeSubDomains`) é emitido por
   [`web/lib/security/headers.ts`](web/lib/security/headers.ts); o Nginx
   redireciona todo HTTP para HTTPS e negocia TLS 1.3 com grupo híbrido

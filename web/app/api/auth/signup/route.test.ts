@@ -37,6 +37,12 @@ describe("POST /api/auth/signup (T13, AUTH-18)", () => {
     expect(d.signUp).toHaveBeenCalledWith("new@example.com", STRONG);
     expect(d.sendVerificationEmail).toHaveBeenCalledWith("id-1");
     expect(res.headers.get("cache-control")).toBe("no-store");
+    const cookie = res.headers.get("set-cookie")!;
+    expect(cookie).toContain("__verify=id-1");
+    expect(cookie).toContain("Path=/api/auth/resend-verification");
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("Secure");
+    expect(cookie).toContain("SameSite=Strict");
   });
 
   it.each([
