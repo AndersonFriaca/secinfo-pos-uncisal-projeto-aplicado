@@ -14,6 +14,14 @@ name: Release
 # the deploy job below calls .github/workflows/deploy.yml, gated on
 # releases_created. Plain pushes to main do not deploy.
 #
+# The release PR is opened with a GitHub App installation token, not the
+# default GITHUB_TOKEN: events created with GITHUB_TOKEN do not start other
+# workflows, so a release PR authored by github-actions[bot] got CI runs that
+# failed at startup with zero jobs. The App (Contents, Pull requests and
+# Issues: read & write, installed on this repository only) is configured via
+# the RELEASE_APP_ID repository variable and the RELEASE_APP_PRIVATE_KEY
+# secret; the token it mints expires after one hour.
+#
 # NOTE: this action runs in manifest mode (config-file + manifest-file), so it
 # emits `releases_created` / `paths_released` and per-path `web--tag_name` —
 # NOT the bare `release_created` / `tag_name` of simple mode.
@@ -39,9 +47,16 @@ jobs:
       releases_created: ${{ steps.rp.outputs.releases_created }}
       tag_name: ${{ steps.rp.outputs['web--tag_name'] }}
     steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - uses: googleapis/release-please-action@v4
         id: rp
         with:
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 

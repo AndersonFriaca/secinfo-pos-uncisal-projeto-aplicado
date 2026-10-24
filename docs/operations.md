@@ -114,6 +114,22 @@ Versionamento semver automático via `release-please`
    `main` atual. A justificativa do gate está no
    [`README.md`](../README.md#pipeline-de-cicd).
 
+O PR de release é aberto com o token de uma GitHub App, e não com o
+`GITHUB_TOKEN` padrão: eventos gerados pelo `GITHUB_TOKEN` não disparam outros
+workflows, e a CI do PR de release falhava sem nenhum job. Configuração (uma
+vez):
+
+1. Criar uma GitHub App na conta (Settings → Developer settings → GitHub
+   Apps), sem webhook, com permissões de repositório **Contents**, **Pull
+   requests** e **Issues** em *Read and write*.
+2. Instalar a App apenas neste repositório.
+3. Gerar uma chave privada da App e cadastrar no repositório a variável
+   `RELEASE_APP_ID` (App ID) e o secret `RELEASE_APP_PRIVATE_KEY` (conteúdo do
+   `.pem`).
+
+Sem essa configuração o job `release PR / tag` falha e nenhuma release nem
+deploy acontece.
+
 `bootstrap-sha` em `release-please-config.json` fixa `3cbc1e3` como ponto de
 partida: a primeira release considera apenas commits posteriores ao trabalho
 de CI/CD.
