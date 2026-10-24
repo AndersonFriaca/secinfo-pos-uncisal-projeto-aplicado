@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/compare/v1.2.1...v1.2.2) (2026-10-24)
+
+
+### Chores
+
+* release 1.2.2 ([c2961e5](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/commit/c2961e59ce403d940c2e1ba9612b2015ce2ae945))
+
 ## [1.2.1](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/compare/v1.2.0...v1.2.1) (2026-10-24)
 
 
