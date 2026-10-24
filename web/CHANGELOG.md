@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/compare/v1.2.0...v1.2.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **auth:** resend verification without re-entering credentials ([126d22d](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/commit/126d22d898522f9f337fa99e2f7c71d33f098667))
+
 ## [1.2.0](https://github.com/AndersonFriaca/secinfo-pos-uncisal-projeto-aplicado/compare/v1.1.0...v1.2.0) (2026-09-13)
 
 
